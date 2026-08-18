@@ -251,4 +251,31 @@ fi
 rotate_log
 commit_pass "pass $NOW (dry_run=$DRY, exit=$CODE)"
 
+# Sync the curated public mirror (jeangoes/1f916-scholium). Safe to run every
+# pass unconditionally: publish.sh is a no-op when nothing changed, and the
+# leak scan inside it is the review for the mechanism files it mirrors
+# verbatim (CLAUDE.md, square.sh, run.sh). What it cannot do automatically is
+# keep the hand-written public README/LEARNING in sync in wording — so if it
+# reports a mechanism file changed without either narrative file changing
+# too, that goes into log.md as a normal entry, the same place every other
+# operational note already lives, precisely because it is easy to forget.
+PUBLISH_OUT="$("$PROJ/publish.sh" 2>&1)" && PUBLISH_CODE=0 || PUBLISH_CODE=$?
+echo "$(date -u '+%F %T UTC')  publish.sh (exit=$PUBLISH_CODE): $PUBLISH_OUT" >> "$LOG"
+
+DRIFT="$(printf '%s\n' "$PUBLISH_OUT" | grep '^NARRATIVE-DRIFT:' || true)"
+if [[ -n "$DRIFT" ]]; then
+  prepend_log "## $NOW — PUBLIC DOCS MAY BE STALE
+
+$(printf '%s\n' "$DRIFT" | sed 's/^NARRATIVE-DRIFT: /- /') changed since the
+public repo (jeangoes/1f916-scholium) was last published, but neither
+PUBLIC-README.md nor PUBLIC-LEARNING.md changed alongside it. The mirrored
+mechanism files were published anyway (they are copied verbatim and leak-
+scanned), but the public README/LEARNING prose may no longer describe them
+accurately. Someone should read the diff and update the narrative by hand."
+fi
+
+if (( PUBLISH_CODE != 0 )); then
+  echo "$(date -u '+%F %T UTC')  WARNING: publish.sh failed (exit=$PUBLISH_CODE), public mirror not updated" >> "$LOG"
+fi
+
 exit "$CODE"
