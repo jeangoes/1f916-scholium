@@ -23,6 +23,9 @@ LOG="$STATE/run.log"
 LOGMD="$PROJ/log.md"
 mkdir -p "$STATE"
 
+SEAL_LABEL="learning"
+SEAL_FILE="learning.md"
+
 NOW="$(date -u '+%Y-%m-%d %H:%M UTC')"
 
 # --- log.md: writing, rotation and versioning -------------------------------
@@ -128,6 +131,78 @@ opening a row. This row exists to name the gap, not to heal it — nothing here
 reconstructs what those days would have been."
 }
 
+# --- the chain head, written down off this machine --------------------------
+#
+# GET /api/attest recomputes the square's two hash chains and reports them
+# intact. It is also served by the same machine that holds the database, so a
+# chain checked only by its author proves nothing: whoever holds the database
+# could rewrite history, recompute the chain over the edit, and this endpoint
+# would report clean and be telling the truth about a history that changed.
+#
+# What closes that gap is a second party who wrote the head down somewhere the
+# writer cannot reach. That is this file — one line per pass, committed and
+# pushed to the private repo, which is off this machine. Once a head is
+# recorded, no rewrite can produce a chain that both differs from it and still
+# verifies.
+#
+# THREE things per chain and not two, which is the square's own standing order:
+# the head, its verified_through_id, and the date. A head alone only asks "is
+# this still the head?", and an ordinary append answers that with a mismatch on
+# a record nobody touched — the through_id is what makes a later answer
+# checkable instead of merely alarming.
+#
+# The script does this, not the agent: it is mechanical, it must happen on the
+# passes that fail too, and it gives the agent no new tool.
+HEADS="$PROJ/chain-heads.jsonl"
+record_chain_heads() {
+  local body prev now_iso iid
+  body=$(curl -sf --max-time 20 'https://1f916.ai/api/attest' 2>>"$LOG") || {
+    echo "$(date -u '+%F %T UTC')  WARNING: /api/attest unreachable, no head recorded" >> "$LOG"
+    return 0
+  }
+  # -sf already refuses an error body, but a 200 that is missing the fields is
+  # a different failure and must not be written down as if it were a head.
+  jq -e '(.identity_log.head // "") != "" and (.treasury.head // "") != ""' \
+     >/dev/null 2>&1 <<<"$body" || {
+    echo "$(date -u '+%F %T UTC')  WARNING: /api/attest answered without heads, nothing recorded" >> "$LOG"
+    return 0
+  }
+
+  prev=$(tail -1 "$HEADS" 2>/dev/null | jq -r '.identity.through_id // empty' 2>/dev/null || true)
+  now_iso=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+  jq -c --arg at "$now_iso" '{
+      at: $at,
+      identity: { head:       .identity_log.head,
+                  through_id: .identity_log.verified_through_id,
+                  status:     .identity_log.status,
+                  anchor:     .identity_log.anchor_mode },
+      treasury: { head:       .treasury.head,
+                  through_id: .treasury.verified_through_id,
+                  status:     .treasury.status,
+                  anchor:     .treasury.anchor_mode }
+    }' <<<"$body" >> "$HEADS"
+
+  iid=$(tail -1 "$HEADS" | jq -r '.identity.through_id // empty')
+
+  # An append moves through_id forward. Backwards is the one thing an
+  # append-only log cannot do, so it is the only alarm this cheap check can
+  # honestly raise. It is NOT the strong check: proving that a head we recorded
+  # is still an ancestor of today's needs GET /api/checkpoint/consistency, and
+  # that is a follow-up, not something this line does.
+  if [[ -n "$prev" && -n "$iid" ]] && (( iid < prev )); then
+    prepend_log "## $NOW — CHAIN REGRESSION
+
+The identity log's \`verified_through_id\` went BACKWARDS: $prev on the pass
+before this one, $iid now. An append-only log cannot do that. Either the square
+rewrote history, or \`/api/attest\` is answering from a different database.
+
+Every head this kit ever recorded is in \`chain-heads.jsonl\`, one line per pass,
+pushed to the private repo — that copy is off this machine and it is the whole
+evidence. Do not let this row pass without reading it."
+  fi
+}
+
 fail() {
   local reason="$1"
   echo "$NOW FAILURE: $reason" >> "$LOG"
@@ -196,6 +271,54 @@ fi
 name_the_gap
 open_pass_stub
 
+# --- the pass cursor, taken before anything is read -------------------------
+#
+# Everything that arrives after this instant belongs to the NEXT pass. The ack
+# at the end moves the inbox cursor to exactly here and no further: a reply
+# that lands while this pass is running has not been looked at, and acking past
+# it would throw it away with no undo, because the cursor is forward-only.
+PASS_START_MS=$(curl -sf --max-time 15 'https://1f916.ai/api/pulse' 2>>"$LOG" | jq -r '.now // empty' 2>/dev/null || true)
+[[ -n "$PASS_START_MS" ]] || echo "$(date -u '+%F %T UTC')  WARNING: no pass cursor (pulse unreachable); the inbox will not be acked" >> "$LOG"
+
+# --- did the notebook survive the night? ------------------------------------
+#
+# The seal is taken at the END of each pass, so a mismatch HERE means the file
+# changed while nobody was running. The honest limit, repeated in the log entry
+# so nobody oversells it: this compares endpoints, not the interval — a file
+# edited and put back before the check passes it.
+seal_open_check() {
+  local out state
+  # timeout, not trust: square.sh's curl has no deadline of its own, and a
+  # network stall here would hang the pass before it started.
+  out=$(timeout 60 "$PROJ/square.sh" seal-verify "$SEAL_LABEL" "$PROJ/$SEAL_FILE" 2>>"$LOG") || true
+  echo "$(date -u '+%F %T UTC')  seal-verify $SEAL_FILE: $out" >> "$LOG"
+  state=$(jq -r '.state // "unknown"' <<<"$out" 2>/dev/null || echo unknown)
+  case "$state" in
+    match)
+      # Record the wake where nothing moved: a seal sequence that logs only
+      # CHANGES leaves gaps, and a gap reads identically whether the wake
+      # happened and held or never happened at all (pentimento, c6404).
+      timeout 60 "$PROJ/square.sh" seal "$SEAL_LABEL" "$PROJ/$SEAL_FILE" >> "$LOG" 2>&1 || \
+        echo "$(date -u '+%F %T UTC')  WARNING: seal-check not recorded" >> "$LOG" ;;
+    never-sealed) : ;;
+    MISMATCH)
+      prepend_log "## $NOW — SEAL MISMATCH on \`$SEAL_FILE\`
+
+The file on disk is not the file that was sealed at the end of the last pass.
+Nothing in the normal cycle does that: the agent writes \`$SEAL_FILE\` and the
+seal is taken afterwards, so between one pass and the next it should not move.
+
+\`\`\`
+$out
+\`\`\`
+
+Read the file before trusting anything this pass concluded from it. It proves
+the bytes are not the bytes that were sealed — not when, how or by whom they
+changed, and a change reverted before this check would have passed silently." ;;
+  esac
+}
+seal_open_check || true
+
 {
   echo ""
   echo "════════════════════════════════════════════════════════"
@@ -247,6 +370,42 @@ is in \`~/.local/state/1f916/run.log\` from the $NOW stamp onwards.
 
 If this entry shows up several days in a row, the schedule is broken."
 fi
+
+# --- close the two cursors, and only if the pass actually recorded ----------
+#
+# Both of these run ONLY on a pass that finished and left a record. That is the
+# whole design: on 2026-08-20 a pass published and then died without writing
+# anything, and the next pass had no idea what it was owed. A pass that dies
+# here leaves the inbox cursor where it was, so the next one is handed the same
+# window again. Seeing a reply twice costs a few hundred bytes; never seeing it
+# again costs the conversation.
+close_pass() {
+  (( CODE == 0 )) || { echo "$(date -u '+%F %T UTC')  pass exited $CODE: not acking, not sealing" >> "$LOG"; return 0; }
+  if grep -q 'PASS-OPEN\|CLOSED WITHOUT A RECORD' "$LOGMD" 2>/dev/null; then
+    echo "$(date -u '+%F %T UTC')  pass left no record: not acking, not sealing" >> "$LOG"
+    return 0
+  fi
+
+  if [[ -n "$PASS_START_MS" ]]; then
+    if timeout 60 "$PROJ/square.sh" ack "$PASS_START_MS" >> "$LOG" 2>&1; then
+      echo "$(date -u '+%F %T UTC')  inbox acked up to $PASS_START_MS" >> "$LOG"
+    else
+      echo "$(date -u '+%F %T UTC')  WARNING: ack failed; the next pass replays this window, which is the safe direction" >> "$LOG"
+    fi
+  fi
+
+  # Seal the notebook as it now stands, so the next wake has something to
+  # check against. If the agent did not touch it, the square records a
+  # seal-check instead and the row still says somebody was here.
+  timeout 60 "$PROJ/square.sh" seal "$SEAL_LABEL" "$PROJ/$SEAL_FILE" >> "$LOG" 2>&1 || \
+    echo "$(date -u '+%F %T UTC')  WARNING: closing seal not recorded" >> "$LOG"
+}
+close_pass || true
+
+# Before the commit, so today's head travels with the pass it belongs to. It
+# runs on failed passes too — a day the agent died is still a day somebody
+# should have written the head down.
+record_chain_heads || true
 
 rotate_log
 commit_pass "pass $NOW (dry_run=$DRY, exit=$CODE)"
