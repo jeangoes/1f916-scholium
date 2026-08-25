@@ -346,6 +346,38 @@ seal_open_check || true
 # thread talks it into wanting to. That is the point of the split that is worth
 # more than the tokens: the half that reads the square's arguments has no door
 # to the square, and the half with the door has already decided what it is for.
+# THE FLAGS ON BOTH INVOCATIONS, and why they are not cosmetic.
+#
+# Cost here is turns times context, and context is paid again on every turn.
+# The pass of 2026-08-24 12:07 ran 223 turns and spent 17.8M tokens of cache
+# read; 42% of that was the fixed head of the prompt, re-read 223 times. So a
+# token cut once from the head is cut 223 times from the bill.
+#
+#   --setting-sources user
+#       Without it the CLI walks up from the cwd and loads every CLAUDE.md it
+#       finds: this directory's (which is ALSO appended below, so the agent was
+#       carrying its own constitution twice), plus 12_Praça/CLAUDE.md and the
+#       root CLAUDE.md — the supervisor's notes and Jean's routing map, which
+#       are about the agent and not addressed to it. 45KB of markdown where
+#       28KB was intended. Measured: 56.5k -> 39.5k tokens of head.
+#       `user` is kept, not dropped: ~/.claude/settings.json is where the
+#       permission mode lives, and dropping it changes what the agent may run,
+#       which is a separate decision from what it costs. A settings file placed
+#       in this directory will NOT be read while this flag is here.
+#
+#   --disable-slash-commands  /  --strict-mcp-config
+#       The session was being handed the operator's personal skill list and the
+#       names of his Gmail, Drive and calendar tools. An agent that reads
+#       argument from a public square has no use for either, and should not be
+#       told they exist. Measured: 39.5k -> 36.0k tokens of head.
+#
+#   --model
+#       Set explicitly on both halves so neither drifts with the operator's
+#       global default. Reading is triage — read the thread, rank the
+#       candidates, measure reception — and runs on sonnet. Writing is the half
+#       that publishes, and stays on opus. If the handoffs get visibly worse,
+#       this is the line to change back.
+
 RECON="$PROJ/recon.md"
 rm -f "$RECON"
 
@@ -399,6 +431,10 @@ NOBODY IS READING THIS IN REAL TIME. Do not ask questions and do not request
 permission: there is no one to answer, and the pass dies waiting. If something
 blocks you, put it in the handoff and stop." \
   --append-system-prompt-file "$PROJ/CLAUDE.md" \
+  --model sonnet \
+  --setting-sources user \
+  --disable-slash-commands \
+  --strict-mcp-config \
   --allowedTools 'Bash(./square.sh:*)' 'Read' \
   >> "$LOG" 2>&1
 RECON_CODE=$?
@@ -465,6 +501,10 @@ permission: there is no one to answer, and the pass dies waiting. If something
 blocks you, write in log.md what blocked you, what you had already decided
 before it blocked you, and stop. The log is your only channel to Jean." \
   --append-system-prompt-file "$PROJ/CLAUDE.md" \
+  --model opus \
+  --setting-sources user \
+  --disable-slash-commands \
+  --strict-mcp-config \
   --allowedTools 'Bash(./square.sh:*)' 'Read' 'Edit(log.md)' 'Edit(suggestions.md)' 'Edit(learning.md)' 'Edit(proposals.md)' \
   >> "$LOG" 2>&1
 CODE=$?
@@ -474,7 +514,16 @@ echo "$(date -u '+%F %T UTC')  pass finished  (exit=$CODE)" >> "$LOG"
 
 # If the stub is still open, the agent never recorded anything. Say so in the
 # row itself rather than leaving a stub whose meaning a reader has to infer.
-if grep -q 'PASS-OPEN' "$LOGMD" 2>/dev/null; then
+#
+# MATCH THE WHOLE HEADER, NEVER THE BARE TOKEN. This was `grep -q 'PASS-OPEN'`
+# until 2026-08-24. The log entry of the 00:16 pass contained the words "one
+# PASS-OPEN row" in the agent's own prose — it was describing the marker it had
+# just cleared — and the grep matched that sentence. The pass was ruled to have
+# left no record, so `close_pass` skipped both the ack and the closing seal:
+# the inbox cursor sat 47 hours unacked and the next pass opened on a seal
+# mismatch it could not explain. A file the agent writes in is not a place to
+# look for a bare substring.
+if grep -qE '^## .* — PASS OPENED, NOT YET CLOSED <!-- PASS-OPEN -->' "$LOGMD" 2>/dev/null; then
   tmp="$LOGMD.tmp.$$"
   sed 's|^## \(.*\) — PASS OPENED, NOT YET CLOSED <!-- PASS-OPEN -->|## \1 — CLOSED WITHOUT A RECORD (exit='"$CODE"')|' "$LOGMD" > "$tmp"
   mv "$tmp" "$LOGMD"
@@ -500,7 +549,11 @@ fi
 # again costs the conversation.
 close_pass() {
   (( CODE == 0 )) || { echo "$(date -u '+%F %T UTC')  pass exited $CODE: not acking, not sealing" >> "$LOG"; return 0; }
-  if grep -q 'PASS-OPEN\|CLOSED WITHOUT A RECORD' "$LOGMD" 2>/dev/null; then
+  # Same rule as above: both of these are HEADER forms, so anchor to the header.
+  # `CLOSED WITHOUT A RECORD` is what the sed above rewrites the stub into, and
+  # it is exactly the kind of phrase the agent quotes when it explains a past
+  # failure in the log.
+  if grep -qE '^## .* — (PASS OPENED, NOT YET CLOSED <!-- PASS-OPEN -->|CLOSED WITHOUT A RECORD)' "$LOGMD" 2>/dev/null; then
     echo "$(date -u '+%F %T UTC')  pass left no record: not acking, not sealing" >> "$LOG"
     return 0
   fi
