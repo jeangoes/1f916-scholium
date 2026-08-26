@@ -28,6 +28,12 @@ SEAL_FILE="learning.md"
 
 NOW="$(date -u '+%Y-%m-%d %H:%M UTC')"
 
+# The stub header of THIS pass, as a literal line. Everything that asks "did
+# this pass leave a record?" compares against these two strings and nothing
+# else — never a pattern, never a substring, and never a header that belongs to
+# some other pass. See the block above `close_pass`.
+PASS_STUB="## $NOW — PASS OPENED, NOT YET CLOSED <!-- PASS-OPEN -->"
+
 # --- log.md: writing, rotation and versioning -------------------------------
 
 # A failure only exists if somebody sees it. Nobody opens run.log; Jean reads
@@ -203,6 +209,43 @@ evidence. Do not let this row pass without reading it."
   fi
 }
 
+# ------------------------------------------------------------- contabilidade
+# Turnos e tokens desta passada, escritos no run.log no fim dela.
+#
+# POR QUE EXISTE. Em 2026-08-25 o obelus foi desligado por custo, e a unica
+# razao de ter sido possivel dizer ONDE o dinheiro foi — 27 dos 43 turnos em
+# duas coisas consertaveis, nao "esta caro" — e que o Gemini CLI narra cada
+# turno no log. O Claude Code nao narra, mas grava `usage` por turno no
+# transcript, que e um numero melhor. Sem isto a proxima conversa sobre custo
+# volta a ser chute, e a primeira medicao ja mostrou que este agente gasta mais
+# turno do que o que foi desligado.
+#
+# A conta e turnos x contexto, nao volume de dados: cada turno reenvia tudo
+# atras dele, entao o cache read cresce quadraticamente e e a linha que importa.
+#
+# Filtra por `cwd` igual ao diretorio deste agente e por timestamp posterior ao
+# inicio da passada, entao uma sessao de supervisao rodando em paralelo nao
+# entra na conta. `fromjson? // empty` pula linha corrompida em vez de derrubar
+# a contabilidade inteira — ela e instrumento, nao pode matar a passada.
+cost_line() {
+  local proj="$1" t0="$2" dir
+  command -v jq >/dev/null 2>&1 || { printf 'cost: jq ausente\n'; return 0; }
+  dir="$HOME/.claude/projects/$(jq -rn --arg p "$proj" '$p | gsub("[^A-Za-z0-9]";"-")')"
+  [[ -d "$dir" ]] || { printf 'cost: sem transcript em %s\n' "$dir"; return 0; }
+  ls "$dir"/*.jsonl >/dev/null 2>&1 || { printf 'cost: nenhum .jsonl em %s\n' "$dir"; return 0; }
+  cat "$dir"/*.jsonl 2>/dev/null | jq -Rrn --arg cwd "$proj" --arg t0 "$t0" '
+    def h: if . >= 1000000 then "\(./100000|floor/10)M"
+           elif . >= 1000 then "\(./1000|floor)k" else "\(.)" end;
+    [ inputs | fromjson? // empty
+      | select(.cwd == $cwd)
+      | select((.timestamp // "") >= $t0)
+      | .message.usage | select(. != null) ] as $u
+    | ($u | length) as $n
+    | if $n == 0 then "cost: 0 turnos com usage desde \($t0)"
+      else "cost: \($n) turnos · out \([$u[].output_tokens//0]|add|h) · cache read \([$u[].cache_read_input_tokens//0]|add|h) · cache write \([$u[].cache_creation_input_tokens//0]|add|h)"
+      end' 2>/dev/null || printf 'cost: transcript ilegivel\n'
+}
+
 fail() {
   local reason="$1"
   echo "$NOW FAILURE: $reason" >> "$LOG"
@@ -319,6 +362,7 @@ changed, and a change reverted before this check would have passed silently." ;;
 }
 seal_open_check || true
 
+PASS_T0=$(date -u '+%Y-%m-%dT%H:%M:%S')
 {
   echo ""
   echo "════════════════════════════════════════════════════════"
@@ -511,21 +555,37 @@ CODE=$?
 set -e
 
 echo "$(date -u '+%F %T UTC')  pass finished  (exit=$CODE)" >> "$LOG"
+# As duas metades, somadas: PASS_T0 e anterior a metade de leitura.
+cost_line "$PROJ" "$PASS_T0" >> "$LOG" || true
 
 # If the stub is still open, the agent never recorded anything. Say so in the
 # row itself rather than leaving a stub whose meaning a reader has to infer.
 #
-# MATCH THE WHOLE HEADER, NEVER THE BARE TOKEN. This was `grep -q 'PASS-OPEN'`
-# until 2026-08-24. The log entry of the 00:16 pass contained the words "one
-# PASS-OPEN row" in the agent's own prose — it was describing the marker it had
-# just cleared — and the grep matched that sentence. The pass was ruled to have
-# left no record, so `close_pass` skipped both the ack and the closing seal:
-# the inbox cursor sat 47 hours unacked and the next pass opened on a seal
-# mismatch it could not explain. A file the agent writes in is not a place to
-# look for a bare substring.
-if grep -qE '^## .* — PASS OPENED, NOT YET CLOSED <!-- PASS-OPEN -->' "$LOGMD" 2>/dev/null; then
+# ONE PASS ASKS ONLY ABOUT ITS OWN STUB. Two bugs here, both fixed, and the
+# second was caused by the fix for the first.
+#
+# Until 2026-08-24 this was `grep -q 'PASS-OPEN'`. The 00:16 pass wrote the
+# words "one PASS-OPEN row" in its own log prose — it was describing the marker
+# it had just cleared — and the grep matched that sentence. The pass was ruled
+# to have left no record, so `close_pass` skipped the ack and the closing seal.
+#
+# The 08-24 fix anchored both greps to the whole header. That fixed the prose
+# match and introduced a worse one, because `close_pass` also matches
+# `CLOSED WITHOUT A RECORD` — a header a FAILED pass leaves behind, which then
+# sits in log.md for seven entries. The 08-24 pass failed and left exactly that
+# row; the 08-25 pass wrote a full record and was ruled record-less anyway by
+# its predecessor's header. Three passes in a row left no seal of either kind
+# and the inbox cursor sat three days unacked.
+#
+# So: no patterns. `$PASS_STUB` and `$PASS_DEAD` are literal lines carrying
+# THIS pass's stamp, compared with `grep -Fx`. A header written by another pass
+# cannot match, and neither can any sentence the agent writes about either one.
+PASS_DEAD="## $NOW — CLOSED WITHOUT A RECORD (exit=$CODE)"
+
+if grep -Fqx "$PASS_STUB" "$LOGMD" 2>/dev/null; then
   tmp="$LOGMD.tmp.$$"
-  sed 's|^## \(.*\) — PASS OPENED, NOT YET CLOSED <!-- PASS-OPEN -->|## \1 — CLOSED WITHOUT A RECORD (exit='"$CODE"')|' "$LOGMD" > "$tmp"
+  awk -v stub="$PASS_STUB" -v dead="$PASS_DEAD" \
+    '$0 == stub { print dead; next } { print }' "$LOGMD" > "$tmp"
   mv "$tmp" "$LOGMD"
   echo "$(date -u '+%F %T UTC')  WARNING: the agent recorded no log entry for this pass" >> "$LOG"
 fi
@@ -549,11 +609,10 @@ fi
 # again costs the conversation.
 close_pass() {
   (( CODE == 0 )) || { echo "$(date -u '+%F %T UTC')  pass exited $CODE: not acking, not sealing" >> "$LOG"; return 0; }
-  # Same rule as above: both of these are HEADER forms, so anchor to the header.
-  # `CLOSED WITHOUT A RECORD` is what the sed above rewrites the stub into, and
-  # it is exactly the kind of phrase the agent quotes when it explains a past
-  # failure in the log.
-  if grep -qE '^## .* — (PASS OPENED, NOT YET CLOSED <!-- PASS-OPEN -->|CLOSED WITHOUT A RECORD)' "$LOGMD" 2>/dev/null; then
+  # This pass's two headers, literal and exact. `$PASS_DEAD` is what the awk
+  # above rewrites the stub into. Both carry `$NOW`, so a failed pass from any
+  # earlier day is invisible here — which is the whole point.
+  if grep -Fqx "$PASS_STUB" "$LOGMD" 2>/dev/null || grep -Fqx "$PASS_DEAD" "$LOGMD" 2>/dev/null; then
     echo "$(date -u '+%F %T UTC')  pass left no record: not acking, not sealing" >> "$LOG"
     return 0
   fi

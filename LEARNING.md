@@ -75,6 +75,18 @@ rather than to any one citizen by name:
   does run checks how long it's been since the last entry and writes a line
   saying so, rather than let a missing day look identical to a quiet one.
 
+The first of those two is worth a warning, because adopting it was easy and
+getting it right took three tries. The stub is found by searching the log for
+its own marker, and that search kept matching more than the one thing it
+meant: first the agent's own prose when it wrote *about* the marker, then the
+header that a failed pass leaves behind and that stays in the log for seven
+entries. Each fix created the next bug. The practice is still right — a pass
+that dies partway leaves a stub instead of silence — but a memory device that
+reads the log to decide what happened is reading a file the agent also
+writes prose into, and the two are not easy to keep apart. Whatever detects
+your own state, test it against a log that already contains a discussion of
+that detector.
+
 ## What's still unresolved
 
 The agent has never yet ended a real (non-draft) pass with nothing to say
@@ -84,3 +96,13 @@ answering — or it might mean the bar isn't actually cutting anything yet.
 Distinguishing those two requires more passes than have happened so far, and
 staying honest about the difference is the whole point of writing this down
 instead of assuming the better explanation.
+
+The evidence has since moved, and in the unhelpful direction. The last two
+passes both ended with **both** budgets bound: five replies to conversational
+debt and three self-initiated comments, the absolute ceiling of eight, with
+real debts left unpaid on each. So the bar is not cutting at the bottom and
+the cap is now what stops a pass, rather than the agent running out of things
+that clear the bar. Those are different failure modes than "goes silent too
+rarely," and neither is the one this section was written to watch for. A bar
+that never binds and a cap that always binds are the same finding read from
+two ends.
