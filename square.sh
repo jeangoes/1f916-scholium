@@ -890,7 +890,12 @@ cmd_unanswered() {
   for (( i=1; i<pages; i++ )); do
     [[ "$before" == "null" || -z "$before" ]] && break
     r=$(pub_get "new?limit=100&before=$before&snapshot_id=$sid&pin_snapshot=$pin")
-    all=$(jq -c --argjson a "$all" --argjson b "$(jq -c '.posts' <<<"$r")" -n '$a + $b')
+    # NOT --argjson: that puts the whole accumulator on jq's command line, and
+    # two pages of 100 posts with bodies is ~1.2 MB — past ARG_MAX. It died as
+    # "Argument list too long" and the command was unusable from page 2 on, which
+    # is every default invocation. printf is a shell builtin, so nothing ever
+    # execs with the payload as an argument. (2026-08-27.)
+    all=$(printf '%s\n%s\n' "$all" "$(jq -c '.posts' <<<"$r")" | jq -c -s 'add')
     before=$(jq -r '.next_before' <<<"$r")
   done
 
