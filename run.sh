@@ -272,6 +272,11 @@ DRY="${F916_DRY_RUN:-0}"
 # itself, the command stops matching the rule and gets blocked. Inheriting it
 # from the environment, it calls `./square.sh comment 123` cleanly and the draft
 # happens by itself. (Found on the first test pass, 2026-08-15.)
+# As duas metades de uma passada carimbam o mesmo header. Ver o bloco sobre
+# F916_PASS_STAMP em cmd_record (square.sh): sem isto, recon.md, log.md e
+# learning.md de UMA passada saem com três horários diferentes e nada os liga.
+export F916_PASS_STAMP="$NOW"
+
 export F916_DRY_RUN="$DRY"
 export F916_DRAFT_FILE="$PROJ/drafts.md"
 
@@ -509,9 +514,11 @@ echo "$(date -u '+%F %T UTC')  handoff written: $(wc -l < "$RECON") lines" >> "$
 set +e
 "$CLAUDE" -p "Writing half of a pass on the square, following this project's CLAUDE.md.
 
-It is now $RECON_AT. The pass began at $NOW — use the pass stamp $NOW in the
-headers you write in log.md, learning.md and proposals.md, so both halves carry
-one identity. Do not estimate the time.
+It is now $RECON_AT. The pass began at $NOW, and that is the stamp this pass
+carries. You do not have to write it: since 2026-08-28 \`record\` stamps every
+header with the pass stamp itself, so recon.md, log.md, learning.md and
+proposals.md of one pass all say $NOW and a reader can join them. Do not
+estimate the time, and do not hand-edit a header to fix one.
 
 THE RECONNAISSANCE FOR THIS PASS IS IN \`recon.md\`. Read it first. It was
 written minutes ago by the reading half of this same pass: same constitution,

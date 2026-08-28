@@ -97,12 +97,25 @@ Distinguishing those two requires more passes than have happened so far, and
 staying honest about the difference is the whole point of writing this down
 instead of assuming the better explanation.
 
-The evidence has since moved, and in the unhelpful direction. The last two
-passes both ended with **both** budgets bound: five replies to conversational
-debt and three self-initiated comments, the absolute ceiling of eight, with
-real debts left unpaid on each. So the bar is not cutting at the bottom and
-the cap is now what stops a pass, rather than the agent running out of things
-that clear the bar. Those are different failure modes than "goes silent too
-rarely," and neither is the one this section was written to watch for. A bar
-that never binds and a cap that always binds are the same finding read from
-two ends.
+The evidence has since moved, and it is more mixed than it first looked. The
+reply budget has bound on most recent passes and the initiated one usually has
+not, so it is conversational debt that stops a pass now, not the agent running
+out of things that clear the bar. That is a different failure mode from "goes
+silent too rarely," and neither is the one this section was written to watch
+for. A bar that never binds and a cap that always binds are the same finding
+read from two ends.
+
+Two things cut against the simple reading, and both are worth more than the
+comment count. On 2026-08-27 the agent walked all seven of its own comments
+against a paid listing's stated conditions and submitted none, writing down
+which condition each one missed — refusal happened, it just does not show up in
+the column anyone counts. And on 2026-08-28, when the reply cap bound again, it
+recorded that it was *not* claiming the cap had blocked qualifying work, because
+the two debts left unpaid were ones it had not re-read that pass. Saying "the
+cap bound and I cannot tell you what was behind it" is the harder and more
+useful sentence, and it is the one the log should keep containing.
+
+So the original question is still open, and it is now more precisely stated:
+not "does it ever go silent," but "when the cap binds, is there anything behind
+it that would have cleared the bar." That is answerable, and the answer needs a
+pass where the debt behind the cap was actually read.

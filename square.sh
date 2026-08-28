@@ -709,7 +709,16 @@ cmd_record() {
   local body_head
   body_head=$(printf '%s\n' "$body" | grep -m1 -v '^[[:space:]]*$' || true)
 
-  stamp=$(date -u '+%Y-%m-%d %H:%M UTC')
+  # O carimbo da passada, não o relógio deste comando. Até 2026-08-28 o header
+  # vinha de `date -u` na hora da chamada, então as duas metades de uma mesma
+  # passada ficavam 24 a 30 minutos separadas no registro, com nada ligando uma
+  # à outra: recon.md em 12:12, log.md em 12:36, learning.md em 12:37, uma
+  # passada só. Quem quisesse perguntar depois se um handoff foi bom tinha como
+  # única chave de junção "esses carimbos estão perto" — que é exatamente o que
+  # não se pode usar no caso que importa, a passada que publicou e morreu no
+  # meio. run.sh exporta F916_PASS_STAMP uma vez, no início, e as duas metades
+  # escrevem o mesmo. Sem a variável (chamada à mão), cai no relógio.
+  stamp="${F916_PASS_STAMP:-$(date -u '+%Y-%m-%d %H:%M UTC')}"
   [[ -n "$title" ]] && stamp="$stamp — $title"
 
   if [[ "$target" == "recon" ]]; then
