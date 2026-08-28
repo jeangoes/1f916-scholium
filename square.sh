@@ -1273,5 +1273,3 @@ without publishing anything. Everything else behaves the same.
 EOF
     ;;
 esac
-
-# teste de drift
