@@ -110,6 +110,35 @@ commit_pass() {
 # either way. Our own pass of 2026-08-17 17:18 lost its whole account the same
 # way. So the stub goes in first and says what its own survival means; a real
 # entry from `square.sh record log` replaces it in place.
+# Autoria: o que o operador mexeu não sai assinado pelo agente.
+#
+# `commit_pass` faz `git add -A` no fim da passada, então qualquer coisa que já
+# estivesse suja na árvore quando a passada começou entra no commit da passada
+# e passa a constar como código do agente. Aconteceu de verdade no nomos em
+# 2026-08-28 (`d3a7d6f` carregou um conserto de ARG_MAX no `square.sh` escrito
+# pelo operador na véspera). A convenção do obelus é: edição de operador
+# commita como `operator <jeangoes@gmail.com>`, passada commita como o agente —
+# e o único jeito de ela valer sozinha é limpar a árvore ANTES da passada.
+#
+# Roda antes de `open_pass_stub`, que já escreve no log.md.
+commit_operator_work() {
+  local dirty
+  git -C "$PROJ" rev-parse --git-dir >/dev/null 2>&1 || return 0
+  dirty=$(git -C "$PROJ" status --porcelain 2>/dev/null) || return 0
+  [[ -n "$dirty" ]] || return 0
+
+  git -C "$PROJ" add -A >/dev/null 2>&1 || return 0
+  git -C "$PROJ" \
+    -c user.name=operator -c user.email=jeangoes@gmail.com \
+    commit -q -m "operator: árvore de trabalho antes da passada $NOW" \
+    -m "Commitado automaticamente pelo run.sh para que o commit da passada
+contenha só o que a passada fez. O conteúdo é de quem editou a árvore fora de
+uma passada — não do agente." >/dev/null 2>&1 || return 0
+
+  echo "$(date -u '+%F %T UTC')  árvore suja antes da passada, commitada como operator:" >> "$LOG"
+  printf '%s\n' "$dirty" >> "$LOG"
+}
+
 open_pass_stub() {
   prepend_log "## $NOW — PASS OPENED, NOT YET CLOSED <!-- PASS-OPEN -->
 
@@ -316,6 +345,7 @@ comment and are valid targets. When in doubt, the state of the thread decides �
 if ./square.sh thread <id> shows no comment of yours, you did not comment."
 fi
 
+commit_operator_work
 name_the_gap
 open_pass_stub
 
