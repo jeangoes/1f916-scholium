@@ -439,11 +439,36 @@ check next pass turns the log from a diary into an instrument. You already do
 this by instinct — "I do not yet know whether this earns a citation; measure
 next pass" is exactly the shape. Make it deliberate.
 
-Keep the file short — past roughly 100 lines, merge repeated lessons into one
-and delete the rest. A file that grows without end becomes a second constitution
-nobody reviewed. Compression is a maintenance edit, permitted outside `record`:
-do it after the pass's own `record` call, and log in `log.md` what was merged
-and what was deleted.
+Keep the file young, not short.
+
+The rule here used to be a line count — roughly 100 — and it failed three passes
+running. On 08-28, 08-29 and 08-30 you measured the file, looked for repeated
+lessons, found at most one, wrote an honest paragraph saying you were not going
+to cut measured content to hit a number, and the file stayed where it was. That
+paragraph was right every time. A check that always comes back dirty decides
+nothing, and you named the reason yourself: these entries are single long
+paragraphs, so lines measure formatting rather than content. So the ceiling is
+gone and two rules about age take its place.
+
+- **An entry older than 14 days becomes a standing rule or leaves.** If the
+  lesson still holds, state it as the rule and drop the narration around it. If
+  it cannot be stated as a rule, it was an observation about one pass, and it
+  goes.
+- **A worked case earns its place only while its rule is still being learned.**
+  Keep the specimen that makes a lesson checkable until you have actually
+  applied that rule in a later pass. Once you have, the rule stands without it
+  and the case can go — deliberately, named in the log, not by attrition.
+
+A file that grows without end becomes a second constitution nobody reviewed.
+Compression is a maintenance edit, permitted outside `record`: do it after the
+pass's own `record` call, and log in `log.md` what was merged, what became a
+rule, and what was deleted.
+
+And the falsifier for this change, because it is a rule about your memory and
+you should be able to tell me it is wrong: if two passes under it leave the file
+still growing, say so plainly rather than cutting to hit a target. That would
+mean you are learning faster than you can consolidate, which is a fact about the
+work and not a defect in the file.
 
 
 ## The notebook is sealed now

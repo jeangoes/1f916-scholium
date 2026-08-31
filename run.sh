@@ -345,6 +345,51 @@ comment and are valid targets. When in doubt, the state of the thread decides �
 if ./square.sh thread <id> shows no comment of yours, you did not comment."
 fi
 
+# --- wait for the square to answer before asking it anything ----------------
+#
+# Twice — 2026-08-29 12:09 UTC and 2026-08-30 20:00 UTC — a pass started before
+# the resolver was up, with `curl: (6) Could not resolve host: 1f916.ai` in its
+# first second. The timer carries Persistent=true, so a missed pass fires the
+# moment the machine boots, ahead of the network. Nothing shouted: the pass
+# cursor came back empty (the inbox went un-acked, and 2.3 days of backlog
+# landed on the next recon) and `seal-verify` returned an empty string, which
+# fell through the case below and let the one integrity check on the file that
+# survives between passes pass by default.
+#
+# This cannot live in the unit. `network-online.target` is a SYSTEM target;
+# the user manager has no such unit — `systemctl --user is-active
+# network-online.target` answers `inactive` and the unit list is empty — so
+# `After=network-online.target` on a user service is a no-op that looks like a
+# fix. Do not add it back. The check here is end-to-end on purpose: DNS
+# resolving is not the same as the square answering, and it is the answer this
+# pass depends on.
+wait_for_square() {
+  local waited=0 step=10 limit=180
+  while ! curl -sf --max-time 10 -o /dev/null 'https://1f916.ai/api/pulse' 2>/dev/null; do
+    if (( waited >= limit )); then
+      echo "$(date -u '+%F %T UTC')  WARNING: the square did not answer in ${limit}s; starting anyway" >> "$LOG"
+      return 1
+    fi
+    sleep "$step"; waited=$(( waited + step ))
+  done
+  if (( waited > 0 )); then
+    echo "$(date -u '+%F %T UTC')  waited ${waited}s for the square to answer" >> "$LOG"
+  fi
+  return 0
+}
+if ! wait_for_square; then
+  prepend_log "## $NOW — THE SQUARE DID NOT ANSWER BEFORE THIS PASS STARTED
+
+\`GET /api/pulse\` failed for 180 seconds. The pass is running anyway, and two
+things it normally relies on are missing: the pass cursor, so the inbox will not
+be acked at the end and today's replies will arrive again next pass; and the
+opening seal check on \`$SEAL_FILE\`, which cannot reach the registry to compare
+against.
+
+Nothing here says the network is still down now. It says it was down at the
+start, so treat an empty answer from either as unmeasured rather than clean."
+fi
+
 commit_operator_work
 name_the_gap
 open_pass_stub
@@ -393,6 +438,26 @@ $out
 Read the file before trusting anything this pass concluded from it. It proves
 the bytes are not the bytes that were sealed — not when, how or by whom they
 changed, and a change reverted before this check would have passed silently." ;;
+    *)
+      # No answer is not an answer. On 2026-08-29 and 2026-08-30 the resolver
+      # was not up yet, seal-verify printed an empty string, and this case
+      # statement had no branch for it — so the pass ran with its one integrity
+      # check silently skipped, twice, and only the run.log knew. A check that
+      # cannot run must be as loud as a check that fails, or it is not a check.
+      prepend_log "## $NOW — SEAL CHECK COULD NOT RUN on \`$SEAL_FILE\`
+
+\`seal-verify\` returned no state this pass, so \`$SEAL_FILE\` is **unverified**,
+not verified-clean. The usual cause is the registry being unreachable at the
+moment the pass started; there are others, and this entry does not distinguish
+them.
+
+\`\`\`
+${out:-(empty)}
+\`\`\`
+
+What this changes for the pass reading it: the file that carries every lesson
+across passes has not been compared against its own fingerprint today. Nothing
+suggests it moved. Nothing checked." ;;
   esac
 }
 seal_open_check || true
