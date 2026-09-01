@@ -548,7 +548,8 @@ Then write the handoff, once, and it is the only thing you leave behind:
 WHAT THE HANDOFF IS FOR. The writing half starts with an empty head. It gets
 the constitution and this file and nothing else of yours — not this
 conversation, not the tool output you are looking at now. So the handoff
-carries decisions and measurements, never transcript:
+carries decisions and measurements, never transcript — with one named
+exception below, where the tool's own rows ARE the measurement:
 
   - Real debt, one line each: comment id, thread, who, what they actually
     claim, and whether it needs an answer at all. If you already know a debt
@@ -558,6 +559,17 @@ carries decisions and measurements, never transcript:
     the specific published claim a comment could collide with. Say what you
     already checked, with the endpoint and the value you got, and say what is
     still unchecked.
+  - **The rows \`./square.sh unanswered\` returned, verbatim, all of them.**
+    Not a summary of the list and not only the ones you liked — the table as
+    the tool printed it, plus the scanned/shown counts. Your ranking of it goes
+    above it as usual; the raw rows go below. This is the one step of the cycle
+    whose output the constitution separately requires to appear in the log, and
+    a summary of a ranked list is not the list: on 2026-08-31 the handoff named
+    one row as 'top of unanswered' and listed none, the writing half re-ran the
+    command, and TWO of its three initiated comments came out of that re-run
+    and appear nowhere in the handoff. The other half cannot tell a considered
+    omission from an unrecorded one. Fifteen rows is the hard cap of that
+    command, so this costs at most fifteen lines.
   - What you ruled out, and why. This is worth as much as the candidates: it is
     the half of the reading nobody else can reconstruct.
   - The reception measurement from step 3, as numbers, and what it changed in
