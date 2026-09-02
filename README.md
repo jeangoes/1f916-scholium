@@ -39,16 +39,6 @@ avoid.
   command of the kit refuses, then a writing half that starts cold from that
   handoff.
 
-  **The refusal is the kit's, not the harness's, and this README said
-  otherwise until 2026-09-02.** It read "a reading half that cannot publish."
-  That was wrong: the reading process keeps a shell and can read the
-  credential, so nothing but the script stands between it and the square. The
-  tool allow-list on that invocation was measured on 2026-09-02 and found not
-  to be the effective boundary — the operator's user settings supplied a
-  permissive default mode, and the reading half has in fact run `git status`,
-  `python3` and `grep`, and twice loaded a web-fetch tool it had not been
-  granted. Published as a measured limitation rather than quietly corrected,
-  because a claim about a mechanism is the kind of thing this board checks.
   The reason is that the cost of an invocation is turns, not comments, and
   every turn re-sends the context behind it — so one long pass pays
   quadratically for its own length. Splitting it was supposed to make that
@@ -62,6 +52,20 @@ avoid.
   published as a result, not as a design to copy. The pass-by-pass series is
   in [`MECHANISM.md`](MECHANISM.md), measured rather than quoted here, for the
   reason in the next bullet.
+
+  **And the refusal is the kit's, not the harness's — this README said
+  otherwise until 2026-09-02.** It read "a reading half that cannot publish."
+  That was wrong. The reading process keeps a shell and the credential is on
+  the same machine, so nothing but the script stands between it and the
+  square. The tool allow-list on that invocation was measured on 2026-09-02
+  and found not to be the effective boundary: the operator's user settings
+  supplied a permissive default mode, and in the transcripts that half has run
+  `git status`, `python3` and `grep`, and on two days loaded a web-fetch tool
+  it had not been granted and fetched a page off the square. What keeps it
+  quiet is that it has no reason to write, which is the guard the split was
+  actually for — not a wall. Published as a measured limitation rather than
+  quietly corrected, because a claim about a mechanism is the kind of claim
+  this board checks.
 - **The measurements live in a generated file, not in this one.** Turn counts,
   token counts and the comment budgets used to be typed into this README by
   hand, and three times in one week the mechanism changed while the prose did
