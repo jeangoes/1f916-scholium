@@ -509,6 +509,26 @@ PASS_T0=$(date -u '+%Y-%m-%dT%H:%M:%S')
 #       which is a separate decision from what it costs. A settings file placed
 #       in this directory will NOT be read while this flag is here.
 #
+#       READ ON 2026-09-02, WHICH NOBODY HAD DONE: the value there is
+#       `"permissions": {"defaultMode": "auto"}`. So --allowedTools below is
+#       NOT the effective boundary — it is a list of things that need no
+#       decision, and everything else is decided by the model. Measured in the
+#       transcripts: the READ-ONLY half has run `git status`, six `python3 -c`
+#       invocations and a `grep` inside ~/.claude/projects/; on 2026-08-16 and
+#       08-17 the agent loaded WebFetch through ToolSearch and fetched
+#       docs.github.com. The half therefore holds a shell and can read
+#       ~/.config/1f916/key, and F916_READ_ONLY only binds this script.
+#       The claim in CLAUDE.md and PUBLIC-README.md was corrected the same day.
+#       Tightening it is a migration, not a flag: `--restricted --tools Bash`
+#       ignores user settings and would make the allow-list bind, and the
+#       reading half can afford it now that `thread --text` exists — its six
+#       python calls were all thread rendering. The writing half cannot yet:
+#       36 of its 63 calls use python3 and about 15 have no kit replacement.
+#       Do the reading half first, measure the refusals in a dry run, and read
+#       02_Obelus/CLAUDE.md:325-328 before touching the writing half — that is
+#       a pass that verified a real finding and could not write down one line
+#       of it, because every write it tried began with `echo`.
+#
 #   --disable-slash-commands  /  --strict-mcp-config
 #       The session was being handed the operator's personal skill list and the
 #       names of his Gmail, Drive and calendar tools. An agent that reads
@@ -531,19 +551,23 @@ export F916_READ_ONLY=1
 
 It is now $NOW.
 
-THIS HALF CANNOT PUBLISH. F916_READ_ONLY=1 is in the environment and every
-command that writes to the square refuses before it touches the network. There
-is nothing to route around: publishing is the other half's job, and it happens
-in a few minutes with your notes in hand.
+THIS HALF DOES NOT PUBLISH. F916_READ_ONLY=1 is in the environment and every
+command in this kit that writes to the square refuses before it touches the
+network. That refusal is the kit's own and it is not a cage — the process has a
+shell and the credential is on this machine — so read it as the instruction it
+is, not as a wall you can lean on. There is nothing to route around anyway:
+publishing is the other half's job, it happens in a few minutes with your notes
+in hand, and routing around this would be the one act that ends the experiment.
 
-Do steps 1 to 5 of the cycle and stop there. Read the whole of every thread you
-are seriously considering — a target you did not read is not a target, and the
-writing half will read it again before it writes, which is not the same as you
-having read it.
+Do steps 1 to 5 of the cycle and stop there. Read the threads you are seriously
+considering with \`./square.sh thread <id> --text\` — a target you did not read
+is not a target. Read enough to RANK it. You do not need to read enough to
+settle it, because the writing half will read the whole thread again before it
+writes anything, and its reading is the one that counts.
 
 Then write the handoff, once, and it is the only thing you leave behind:
 
-    echo \"...\" | ./square.sh record recon \"recon\"
+    ./square.sh record recon \"recon\" --body \"...\"
 
 WHAT THE HANDOFF IS FOR. The writing half starts with an empty head. It gets
 the constitution and this file and nothing else of yours — not this
@@ -551,14 +575,13 @@ conversation, not the tool output you are looking at now. So the handoff
 carries decisions and measurements, never transcript — with one named
 exception below, where the tool's own rows ARE the measurement:
 
-  - Real debt, one line each: comment id, thread, who, what they actually
-    claim, and whether it needs an answer at all. If you already know a debt
-    row should be skipped, say so and say why, so the other half does not
-    re-derive it.
+  - Real debt, one line each: comment id, thread, who, and what they actually
+    claim. Ranked. Not judged — see the paragraph on verdicts below.
   - Candidates, one block each: post id, author, votes, how many comments, and
     the specific published claim a comment could collide with. Say what you
     already checked, with the endpoint and the value you got, and say what is
-    still unchecked.
+    still unchecked. An endpoint and a number are worth carrying; what you
+    concluded from them is not.
   - **The rows \`./square.sh unanswered\` returned, verbatim, all of them.**
     Not a summary of the list and not only the ones you liked — the table as
     the tool printed it, plus the scanned/shown counts. Your ranking of it goes
@@ -570,18 +593,28 @@ exception below, where the tool's own rows ARE the measurement:
     and appear nowhere in the handoff. The other half cannot tell a considered
     omission from an unrecorded one. Fifteen rows is the hard cap of that
     command, so this costs at most fifteen lines.
-  - What you ruled out, and why. This is worth as much as the candidates: it is
-    the half of the reading nobody else can reconstruct.
+  - What you read and did not rank: the ids, one clause each. Not the argument
+    — the id and the clause are what stop the other half from re-reading it,
+    and the argument is what it would re-derive anyway.
   - The reception measurement from step 3, as numbers, and what it changed in
     your reading of your own last pass. Step 9 has the other half updating
     learning.md from it — it cannot re-derive a conclusion you did not write
     down, and it should not be paying to re-measure what you already measured.
   - Anything the kit did wrong, in the words you would use in the log.
 
-DO NOT DRAFT COMMENT TEXT. Writing is the other half's work and drafting here
-just moves the cost. Sixty to a hundred lines is the size of a good handoff. If
-yours is longer than the cycle section of your own constitution, you are pasting
-instead of deciding.
+DO NOT DRAFT COMMENT TEXT, AND DO NOT WRITE VERDICTS. Writing is the other
+half's work and drafting here just moves the cost. The verdicts go for a harder
+reason: they are thrown away by construction and they were wrong. The writing
+half is told to re-read every thread and re-pull every number, so a conclusion
+you reach here is re-derived there no matter what you write; and on 2026-09-01
+the writing half recorded that the handoff's conclusions were wrong or
+incomplete on three of the five items it acted on, while its target ranking was
+followed exactly. Rank, measure, and hand over the rows. Say 'unchecked' and
+leave it — an honest gap costs the other half one call, and a wrong verdict
+costs it the call plus the argument against you.
+
+Sixty to a hundred lines is the size of a good handoff. If yours is longer than
+the cycle section of your own constitution, you are pasting instead of deciding.
 
 NOBODY IS READING THIS IN REAL TIME. Do not ask questions and do not request
 permission: there is no one to answer, and the pass dies waiting. If something
@@ -636,7 +669,9 @@ note is fresh enough to feel like memory. If a target does not survive your own
 reading of the thread, do not comment there, and say so in the log.
 
 Do steps 6 to 9 of the cycle. Read the whole thread before writing into it,
-every time; the other half reading it does not discharge that.
+every time; the other half reading it does not discharge that. Use
+\`./square.sh thread <id> --text\` — it renders the thread as prose and walks to
+the last page, so reading one costs a call rather than a call plus a script.
 
 RE-FETCH EVERY NUMBER YOU PUBLISH. The handoff's readings are minutes old,
 and minutes are enough here — your own learning file says the square argues at
@@ -650,9 +685,14 @@ two cannot drift apart. Only the essential: if nothing clears the bar, stop
 without commenting and record that in log.md. Stopping quietly is a valid
 result, and it is still a valid result when the handoff is full of candidates.
 
-ONE THING ABOUT THE MECHANISM ITSELF, in the log entry: this is the first pass
-that runs in two halves. Say whether the handoff was enough, and name what you
-had to go back and read again because it was not. Nobody else can see that.
+ONE THING ABOUT THE MECHANISM ITSELF, in the log entry. Two things changed on
+2026-09-02 and only you can see whether they worked. First, \`thread --text\`
+and \`api comment/<id> --text\` now exist, so reading should no longer cost a
+pipe into python — say whether you still had to write one to read something,
+and for what. Second, the reading half was told to rank and measure and to stop
+writing verdicts, because its verdicts were being discarded anyway. Say whether
+the thinner handoff cost you anything, naming what you had to go back and read
+that a verdict would have saved. Nobody else can see either of these.
 
 NOBODY IS READING THIS IN REAL TIME. Do not ask questions and do not request
 permission: there is no one to answer, and the pass dies waiting. If something
