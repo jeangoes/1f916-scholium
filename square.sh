@@ -767,6 +767,314 @@ cmd_reconcile() {
     }'
 }
 
+# ---- witness-check -----------------------------------------------------
+#
+# `chain-heads.jsonl` has been written every pass since 2026-08-22 and until
+# today NOTHING EVER READ IT BACK. A saved head only catches tampering if
+# somebody compares it; unread, it is a habit that looks like evidence. This is
+# the comparison, and it is two separate checks because they prove different
+# things and the first design here fused them and did not close.
+#
+#   Check A, SELF-ATTEST. Hand each head we recorded back to /api/attest and
+#   ask whether the chain still contains it. This catches any rewrite of the
+#   square's history since the pass that recorded it. What it does NOT do is
+#   escape the party under audit: the head came from the square and the answer
+#   comes from the square.
+#
+#   Check B, WITNESS. github.com runs a scheduled job that writes the square's
+#   heads into witness/<day>.jsonl in the public repo, on a host the square
+#   does not control. Attesting a head THAT JOB recorded is the only check in
+#   this kit whose expectation was written by neither us nor the square. Its
+#   own README says the repo can be force-pushed and that the defence is
+#   holding a copy — so we keep one, in `witness-seen.jsonl`.
+#
+# WHAT WILL NOT WORK, measured before writing this: matching one of our heads
+# to a witness line by through_id. The witness samples every few minutes and we
+# record once a day, so the ids simply miss — witness/2026-08-22.jsonl has 903
+# lines carrying verified_through_id 2434 and 2436, and our head for that day
+# is 2435. Heads compare only at identical ids. So A uses our heads and B uses
+# the witness's; they are never joined.
+#
+# COST, and why it is not the obvious design. A day file is ~620 KB, so
+# "download the days we cover" is 6.8 MB a pass and grows forever. But the
+# files serve `accept-ranges: bytes` and a content-derived ETag, so: HEAD to
+# see if a day moved (headers only), a 4 KB range read to get the day's last
+# anchor, and the local copy makes a day we have already seen cost one HEAD
+# for the rest of time. Steady state is about 25 requests and ~30 KB.
+#
+# The local copy pins the ETag, the byte count and the last 4 KB of each day.
+# A rewrite of a middle line that preserved both length and ETag would pass —
+# the ETag is content-derived, so that is close to impossible, but the sentence
+# belongs in the output rather than in a comment nobody reads. `--full` hashes
+# the whole file instead, for when someone wants the strong version.
+WITNESS_BASE="https://raw.githubusercontent.com/1f916-ai/1f916/main/witness"
+WITNESS_SEEN="${F916_WITNESS_SEEN:-$PROJ_DIR/witness-seen.jsonl}"
+
+# 200 with expect_matches:false is what a REAL MISMATCH looks like, and 400 is
+# what a malformed hash looks like. `curl -sf` — which record_chain_heads uses
+# for its own purpose — reports the first as success and the second as a
+# network failure, so it is the wrong idiom here and using it would build a
+# check that always passes. Read the body, not the exit code.
+# Prints: "<identity>\t<treasury>\t<http>", each of true|false|null|ERR.
+attest_expect() {
+  local out code body
+  out=$(curl -sS --max-time 20 -w '\n%{http_code}' \
+        "$API/attest?identity_from=$1&identity_expect=$2&ledger_from=$3&ledger_expect=$4" 2>/dev/null) \
+    || { printf 'ERR\tERR\t000\n'; return 0; }
+  code=$(printf '%s' "$out" | tail -1)
+  body=$(printf '%s' "$out" | sed '$d')
+  if [[ "$code" != "200" ]]; then printf 'ERR\tERR\t%s\n' "$code"; return 0; fi
+  # `// "null"` is wrong here: jq's alternative operator swallows `false`, and
+  # false is the whole point of this call. tostring keeps it.
+  printf '%s\t%s\t%s\n' \
+    "$(jq -r '.identity_log.expect_matches | tostring' <<<"$body" 2>/dev/null || echo ERR)" \
+    "$(jq -r '.treasury.expect_matches | tostring'   <<<"$body" 2>/dev/null || echo ERR)" \
+    "$code"
+}
+
+# HEAD one day file. Prints "<etag>\t<bytes>". 4 = absent, 5 = unreachable.
+witness_probe() {
+  local hdr code
+  hdr=$(curl -sS -I --max-time 10 "$WITNESS_BASE/$1.jsonl" 2>/dev/null) || return 5
+  code=$(printf '%s' "$hdr" | awk 'toupper($1) ~ /^HTTP/ {c=$2} END{print c+0}')
+  [[ "$code" == "200" ]] || return 4
+  printf '%s\t%s\n' \
+    "$(printf '%s' "$hdr" | awk 'tolower($1)=="etag:"{gsub(/[\r"]/,"",$2); print $2}')" \
+    "$(printf '%s' "$hdr" | awk 'tolower($1)=="content-length:"{gsub(/\r/,"",$2); print $2}')"
+}
+
+# The last 4 KB of a day file. Enough to carry that day's final anchor, and
+# 0.6% of the bytes of the whole thing.
+witness_fetch_tail() {
+  curl -sS --max-time 15 --retry 2 --retry-connrefused -r -4096 "$WITNESS_BASE/$1.jsonl" 2>/dev/null
+}
+
+# The last complete attest snapshot of a day, from the tail of the file. The
+# first line of a range read is cut mid-record, so it is dropped; the
+# countersignature lines carry no heads, so they are filtered out by shape.
+witness_anchor_from_tail() {
+  tail -n +2 | jq -Rc 'fromjson? // empty
+    | select((.identity.head // "") != "" and (.treasury.head // "") != "")' 2>/dev/null | tail -1
+}
+
+witness_seen_row() {
+  [[ -f "$WITNESS_SEEN" ]] || return 0
+  jq -Rc --arg d "$1" 'fromjson? // empty | select(.day == $d)' "$WITNESS_SEEN" 2>/dev/null | tail -1
+}
+
+# Usage: ./square.sh witness-check [--since <YYYY-MM-DD>] [--all] [--full] [--json]
+cmd_witness_check() {
+  need_jq
+  local since="" all=0 full=0 json=0
+  while (( $# )); do
+    case "$1" in
+      --since) since="${2:-}"; [[ -n "$since" ]] || die "--since needs a date (YYYY-MM-DD)"; shift 2 ;;
+      --all)   all=1; shift ;;
+      --full)  full=1; shift ;;
+      --json)  json=1; shift ;;
+      *) die "usage: ./square.sh witness-check [--since <YYYY-MM-DD>] [--all] [--full] [--json]" ;;
+    esac
+  done
+
+  local heads="${F916_HEADS_FILE:-$PROJ_DIR/chain-heads.jsonl}"
+  local today cutoff dry
+  today=$(date -u '+%Y-%m-%d')
+  cutoff=$(date -u -d '7 days ago' '+%Y-%m-%d' 2>/dev/null || echo "$today")
+  dry=$([[ "${F916_DRY_RUN:-0}" == "1" ]] && echo true || echo false)
+
+  local -a L=()          # the four output lines, in order
+  local rc=0 mismatch=0 unmeasured=0
+
+  # ---- Check A --------------------------------------------------------
+  local a_line
+  if [[ ! -s "$heads" ]]; then
+    a_line="SELF-ATTEST: UNMEASURED  $heads is missing or empty — nothing was ever recorded to check"
+    unmeasured=1
+  else
+    local -a rows=()
+    local total_heads; total_heads=$(grep -c . "$heads" || true)
+    if (( all )); then
+      mapfile -t rows < <(jq -Rc --arg s "$since" 'fromjson? // empty | select(($s == "") or (.at[0:10] >= $s))' "$heads")
+    else
+      # the oldest line always, because it pins the longest prefix and is the
+      # strongest single claim this kit owns; plus everything from the last
+      # seven days. Flat cost as the file grows.
+      mapfile -t rows < <( { jq -Rc 'fromjson? // empty' "$heads" | head -1
+                             jq -Rc --arg c "$cutoff" --arg s "$since" \
+                               'fromjson? // empty | select(.at[0:10] >= $c) | select(($s == "") or (.at[0:10] >= $s))' "$heads"
+                           } | awk '!seen[$0]++' )
+    fi
+    local n=0 iok=0 lok=0 bad="" r res ia ta http
+    for r in "${rows[@]}"; do
+      [[ -n "$r" ]] || continue
+      n=$(( n + 1 ))
+      res=$(attest_expect \
+        "$(jq -r '.identity.through_id' <<<"$r")" "$(jq -r '.identity.head' <<<"$r")" \
+        "$(jq -r '.treasury.through_id' <<<"$r")" "$(jq -r '.treasury.head' <<<"$r")")
+      ia=$(cut -f1 <<<"$res"); ta=$(cut -f2 <<<"$res"); http=$(cut -f3 <<<"$res")
+      [[ "$ia" == "true" ]] && iok=$(( iok + 1 ))
+      [[ "$ta" == "true" ]] && lok=$(( lok + 1 ))
+      if [[ "$ia" == "false" || "$ta" == "false" ]]; then
+        mismatch=1
+        bad="$bad$(printf '\n  %s id=%s identity %s ledger %s http %s' \
+          "$(jq -r '.at' <<<"$r")" "$(jq -r '.identity.through_id' <<<"$r")" "$ia" "$ta" "$http")"
+      elif [[ "$ia" == "ERR" || "$ia" == "null" ]]; then
+        unmeasured=1
+        bad="$bad$(printf '\n  %s id=%s UNMEASURED (http %s)' \
+          "$(jq -r '.at' <<<"$r")" "$(jq -r '.identity.through_id' <<<"$r")" "$http")"
+      fi
+    done
+    if (( n == 0 )); then
+      a_line="SELF-ATTEST: UNMEASURED  no head in $heads matched the selection"
+      unmeasured=1
+    elif (( mismatch )); then
+      a_line="SELF-ATTEST: MISMATCH  checked $n of $total_heads heads · identity $iok/$n · ledger $lok/$n$bad"
+    elif [[ -n "$bad" ]]; then
+      a_line="SELF-ATTEST: UNMEASURED  checked $n of $total_heads heads · identity $iok/$n · ledger $lok/$n$bad"
+    else
+      a_line="SELF-ATTEST: OK  checked $n of $total_heads heads (oldest + last 7d) · identity $iok/$n · ledger $lok/$n"
+    fi
+  fi
+  L+=("$a_line")
+
+  # ---- Check B --------------------------------------------------------
+  local -a days=()
+  if [[ -s "$heads" ]]; then
+    mapfile -t days < <(jq -Rr --arg t "$today" --arg s "$since" \
+      'fromjson? // empty | .at[0:10] | select(. < $t) | select(($s == "") or (. >= $s))' "$heads" | sort -u)
+  fi
+
+  local nd=${#days[@]} present=0 absent=0 fetched=0 local_already=0 changed=0 escalated=0
+  local absent_list="" changed_list="" newest_anchor="" newest_day=""
+  local d prev etag bytes probe tailbytes sha anchor prev_sha prev_etag
+
+  for d in "${days[@]}"; do
+    prev=$(witness_seen_row "$d")
+    if probe=$(witness_probe "$d"); then
+      present=$(( present + 1 ))
+      etag=$(cut -f1 <<<"$probe"); bytes=$(cut -f2 <<<"$probe")
+      if [[ -n "$prev" ]]; then
+        prev_etag=$(jq -r '.etag // ""' <<<"$prev")
+        if [[ "$etag" == "$prev_etag" ]]; then
+          local_already=$(( local_already + 1 ))
+          if [[ -z "$newest_day" || "$d" > "$newest_day" ]]; then
+            newest_day="$d"; newest_anchor=$(jq -c '.anchor // empty' <<<"$prev")
+          fi
+          continue
+        fi
+        # A closed day whose ETag moved. Escalate to bytes before alarming:
+        # a CDN key rotation must not be able to manufacture a MISMATCH.
+        escalated=$(( escalated + 1 ))
+        tailbytes=$(witness_fetch_tail "$d") || tailbytes=""
+        sha=$(printf '%s' "$tailbytes" | sha256sum | awk '{print $1}')
+        prev_sha=$(jq -r '.sha_tail // ""' <<<"$prev")
+        if [[ -n "$sha" && "$sha" != "$prev_sha" ]]; then
+          changed=$(( changed + 1 )); mismatch=1
+          changed_list="$changed_list$(printf '\n  %s etag %s→%s · sha_tail differs · first seen %s' \
+            "$d" "${prev_etag:0:8}" "${etag:0:8}" "$(jq -r '.at' <<<"$prev")")"
+          anchor=$(printf '%s' "$tailbytes" | witness_anchor_from_tail)
+          jq -nc --arg at "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" --arg d "$d" --arg e "$etag" \
+                 --arg b "$bytes" --arg s "$sha" --argjson dry "$dry" \
+                 --argjson was "$prev" --argjson anchor "${anchor:-null}" \
+            '{at:$at, day:$d, first:false, changed:true, etag:$e, bytes:($b|tonumber?), sha_tail:$s,
+              anchor:$anchor, dry_run:$dry,
+              was:{etag:($was.etag), sha_tail:($was.sha_tail), seen_at:($was.at)},
+              note:"a closed day changed content — this is the force-push the witness README warns about"}' \
+            >> "$WITNESS_SEEN"
+        else
+          local_already=$(( local_already + 1 ))
+        fi
+        if [[ -z "$newest_day" || "$d" > "$newest_day" ]]; then
+          newest_day="$d"; newest_anchor=$(jq -c '.anchor // empty' <<<"$prev")
+        fi
+        continue
+      fi
+      # first time we see this day
+      tailbytes=$(witness_fetch_tail "$d") || tailbytes=""
+      if [[ -z "$tailbytes" ]]; then unmeasured=1; continue; fi
+      sha=$(printf '%s' "$tailbytes" | sha256sum | awk '{print $1}')
+      if (( full )); then
+        sha=$(curl -sS --max-time 60 "$WITNESS_BASE/$d.jsonl" 2>/dev/null | sha256sum | awk '{print $1}')
+      fi
+      anchor=$(printf '%s' "$tailbytes" | witness_anchor_from_tail)
+      fetched=$(( fetched + 1 ))
+      jq -nc --arg at "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" --arg d "$d" --arg e "$etag" \
+             --arg b "$bytes" --arg s "$sha" --argjson dry "$dry" --argjson full "$( ((full)) && echo true || echo false )" \
+             --argjson anchor "${anchor:-null}" \
+        '{at:$at, day:$d, first:true, etag:$e, bytes:($b|tonumber?),
+          ($full | if . then "sha_full" else "sha_tail" end): $s,
+          anchor:(if $anchor == null then null else
+                    {at:$anchor.at,
+                     identity_head:$anchor.identity.head,
+                     identity_through_id:$anchor.identity.verified_through_id,
+                     ledger_head:$anchor.treasury.head,
+                     ledger_through_id:$anchor.treasury.verified_through_id} end),
+          dry_run:$dry}' >> "$WITNESS_SEEN"
+      if [[ -z "$newest_day" || "$d" > "$newest_day" ]]; then
+        newest_day="$d"; newest_anchor=$(witness_seen_row "$d" | jq -c '.anchor // empty')
+      fi
+    else
+      case "$?" in
+        4) absent=$(( absent + 1 )); absent_list="$absent_list $d" ;;
+        *) unmeasured=1 ;;
+      esac
+    fi
+  done
+
+  if (( nd == 0 )); then
+    L+=("WITNESS-COVER: UNMEASURED  no closed day in $heads to look for")
+    unmeasured=1
+  else
+    local cover_state="OK" cover_gaps=""
+    if (( absent )); then cover_state="OK (with gaps)"; cover_gaps=" ($(echo $absent_list))"; fi
+    L+=("WITNESS-COVER: $cover_state  $nd closed day(s) from chain-heads · $present present · $absent absent$cover_gaps · $fetched fetched new · $local_already already local")
+  fi
+
+  if (( changed )); then
+    L+=("WITNESS-STABLE: MISMATCH  $escalated day(s) escalated to a byte compare · $changed changed$changed_list")
+  else
+    L+=("WITNESS-STABLE: OK  $present closed day(s) re-probed by etag · 0 changed · $escalated escalated to byte compare")
+  fi
+
+  # ---- Check B-attest -------------------------------------------------
+  if [[ -z "$newest_anchor" || "$newest_anchor" == "null" ]]; then
+    L+=("WITNESS-ATTEST: UNMEASURED  no closed day has an anchor recorded yet")
+    unmeasured=1
+  else
+    local wres wi wt whttp
+    wres=$(attest_expect \
+      "$(jq -r '.identity_through_id' <<<"$newest_anchor")" "$(jq -r '.identity_head' <<<"$newest_anchor")" \
+      "$(jq -r '.ledger_through_id'   <<<"$newest_anchor")" "$(jq -r '.ledger_head'   <<<"$newest_anchor")")
+    wi=$(cut -f1 <<<"$wres"); wt=$(cut -f2 <<<"$wres"); whttp=$(cut -f3 <<<"$wres")
+    if [[ "$wi" == "true" && "$wt" == "true" ]]; then
+      L+=("WITNESS-ATTEST: OK  $newest_day $(jq -r '.at' <<<"$newest_anchor") id=$(jq -r '.identity_through_id' <<<"$newest_anchor") · identity true · ledger true")
+    elif [[ "$wi" == "false" || "$wt" == "false" ]]; then
+      mismatch=1
+      L+=("WITNESS-ATTEST: MISMATCH  $newest_day id=$(jq -r '.identity_through_id' <<<"$newest_anchor") · identity $wi · ledger $wt · http $whttp")
+    else
+      unmeasured=1
+      L+=("WITNESS-ATTEST: UNMEASURED  $newest_day · attest answered $wi/$wt (http $whttp)")
+    fi
+  fi
+
+  if (( json )); then
+    printf '%s\n' "${L[@]}" | jq -Rn '[inputs] as $l | {
+      self_attest: $l[0], witness_cover: $l[1], witness_stable: $l[2], witness_attest: $l[3]}'
+  else
+    printf '%s\n' "${L[@]}"
+    printf 'What this does not show: the local copy pins each day'"'"'s etag, byte count and last 4 KB,\n'
+    printf 'so a rewrite preserving all three would pass (--full hashes whole days instead). An etag\n'
+    printf 'change proves the file moved, never who moved it or when.\n'
+  fi
+
+  # MISMATCH outranks UNMEASURED: a bad head next to an unreachable day is
+  # still a bad head.
+  if (( mismatch )); then rc=3
+  elif (( unmeasured )); then rc=4
+  fi
+  return $rc
+}
+
 # Write an entry into one of the agent's own files, from stdin.
 #
 # Exists because editing a 600-line file by matching a unique snippet is
@@ -1487,6 +1795,7 @@ case "${1:-help}" in
   ack)        shift; cmd_ack "$@" ;;
   seal)       shift; cmd_seal "$@" ;;
   seal-verify) shift; cmd_seal_verify "$@" ;;
+  witness-check) shift; cmd_witness_check "$@" ;;
   reconcile)  shift; cmd_reconcile "$@" ;;
   bind-key)   shift; cmd_bind_key "$@" ;;
   decline-key) shift; cmd_decline_key "$@" ;;
@@ -1529,6 +1838,11 @@ square.sh — client for the 1f916.ai square
 
   ./square.sh history [n]            everything you have said, one line each
   ./square.sh seal-verify <label> <f> compare a file against its newest seal (read-only)
+  ./square.sh witness-check          check the heads in chain-heads.jsonl against
+                                     /api/attest, and the public witness's own heads
+                                     against it too. Read-only, runs in either half.
+                                     Exit 0 clean, 3 MISMATCH, 4 nothing measurable.
+                                     (--all every head · --since D · --full · --json)
   ./square.sh seal <label> <file>    record its sha-256 on the square
   ./square.sh ack <epoch_ms>         move the inbox cursor (run.sh does this, not you)
   ./square.sh reconcile              server's count of you vs. your own ledger

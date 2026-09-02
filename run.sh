@@ -462,6 +462,80 @@ suggests it moved. Nothing checked." ;;
 }
 seal_open_check || true
 
+# The other integrity check, and the one that reaches outside this machine.
+# `record_chain_heads` has appended a head every pass since 2026-08-22 and
+# until 2026-09-02 nothing ever read one back — a saved head only catches
+# tampering if somebody compares it. `witness-check` is that comparison; the
+# reasoning and the cost are in square.sh, above cmd_witness_check.
+#
+# Ordering matters and is deliberate: this runs at the START of the pass, and
+# `record_chain_heads` runs at the END. So a head is verified on the pass AFTER
+# the one that recorded it. A pass that verified its own fresh head would be
+# asking the square to confirm a number the square handed it thirty seconds
+# earlier, which is not a check.
+#
+# The `set +e` with `$?` captured separately is not decoration. `seal_open_check`
+# gets away with `|| true` because it parses state out of the body and never
+# looks at the code; here the code IS the contract, and `|| true` would silently
+# make every pass read 0.
+witness_open_check() {
+  local out code
+  set +e
+  out=$(timeout 180 "$PROJ/square.sh" witness-check 2>>"$LOG")
+  code=$?
+  set -e
+  echo "$(date -u '+%F %T UTC')  witness-check (exit=$code):" >> "$LOG"
+  printf '%s\n' "$out" >> "$LOG"
+  case "$code" in
+    0) : ;;
+    3)
+      prepend_log "## $NOW — CHAIN OR WITNESS MISMATCH
+
+\`witness-check\` came back 3. Either a head this kit recorded is no longer in
+the square's chain, or a closed day of the public witness changed content after
+we had already recorded its bytes. Read the lines below before anything else
+this pass, and do not publish a number that depends on the chain until you have.
+
+\`\`\`
+${out:-(empty)}
+\`\`\`
+
+**What this proves and what it does not.** A failed \`expect_matches\` says the
+chain no longer contains a head we hold — that is a rewrite, and the evidence is
+\`chain-heads.jsonl\`, which is pushed off this machine every pass. A changed
+witness day says the FILE moved; it does not say who moved it or when, and the
+witness's own README says that repo can be force-pushed and that holding a copy
+is the whole defence. We hold one, in \`witness-seen.jsonl\`. Say what the rows
+show. Do not name an attacker." ;;
+    4)
+      prepend_log "## $NOW — THE WITNESS CHECK COULD NOT RUN
+
+\`witness-check\` came back 4: nothing was measurable this pass. That is not a
+clean result and it is not an alarm either — it is an absence, and it has to be
+as loud as a failure or it becomes a check that quietly stopped running. The
+usual cause is the square or raw.githubusercontent being unreachable at the
+moment the pass started. There are others, and this row does not distinguish them.
+
+\`\`\`
+${out:-(empty)}
+\`\`\`" ;;
+    *)
+      # Empty output, a timeout, a crash. On 2026-08-29 and 08-30 seal-verify
+      # returned an empty string, the case statement had no branch for it, and
+      # the pass ran with its integrity check silently skipped — twice. Not
+      # again, and not here.
+      prepend_log "## $NOW — THE WITNESS CHECK COULD NOT RUN (exit=$code)
+
+\`witness-check\` did not return one of its three states. A check that cannot
+run must be as loud as a check that fails.
+
+\`\`\`
+${out:-(empty)}
+\`\`\`" ;;
+  esac
+}
+witness_open_check || true
+
 PASS_T0=$(date -u '+%Y-%m-%dT%H:%M:%S')
 {
   echo ""

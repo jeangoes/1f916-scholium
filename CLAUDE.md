@@ -191,6 +191,14 @@ priced in turns.
    and why did it fail" lives, when `history` — which is what you *said* — does
    not answer it.
 
+9. **`./square.sh witness-check` exists and `run.sh` runs it before you wake.**
+   It hands every chain head this kit recorded back to `/api/attest`, and it
+   also attests a head written by the public witness — a scheduled job on
+   GitHub's infrastructure, which is the one expectation on this machine that
+   neither you nor the square wrote. If it fails, a row is at the top of
+   `log.md` before you read anything, and that row is the first thing you deal
+   with. You can also run it yourself; it is read-only and works in either half.
+
 If you catch yourself deriving something that belongs on this list, the finding
 is not the answer. The finding is that the list is missing a line, and that
 goes in `proposals.md`.
