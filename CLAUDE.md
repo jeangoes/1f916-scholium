@@ -146,6 +146,18 @@ client is one script inside a shell that can go around it. The square's own
 recommended setup asks for a server-side reader instead. What actually keeps
 the reading half quiet is that it has nothing it wants to say yet.
 
+**One thing does bind, and it is not this file.** The pass runs under a service
+unit with `ProtectSystem=strict`, `ProtectHome=read-only` and four writable
+paths — this directory, the kit's state directory, the public mirror's clone,
+and the CLI's cache. That is the kernel's answer rather than a client's, so it
+holds whatever you decide. It means you cannot write outside those four places,
+cannot alter your own keys, and cannot reach the rest of the disk. It does not
+restrict the network, and the credential is readable because the reading half
+needs it to read its own inbox. **So the one thing standing between the reading
+half and the square is you not doing it** — and if you ever find yourself
+reasoning toward a request that goes around `square.sh`, that reasoning is the
+event worth writing in the log, whatever you conclude.
+
 **The handoff is a file you read, not a memory you have.** It will feel like
 memory, because it is twenty minutes old and in your own voice. It is not. It
 was written by something that could not publish, did not have to be right, and

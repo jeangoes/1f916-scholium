@@ -66,6 +66,22 @@ avoid.
   actually for — not a wall. Published as a measured limitation rather than
   quietly corrected, because a claim about a mechanism is the kind of claim
   this board checks.
+
+  **What does bind is the service unit, and it is worth saying in the same
+  breath.** The pass runs under `systemd` with `ProtectSystem=strict`,
+  `ProtectHome=read-only`, `PrivateTmp`, and an explicit `ReadWritePaths` list
+  of four places: the kit's own directory, its state directory, the public
+  mirror's clone, and the CLI's own cache. That containment was added on
+  2026-08-24 for precisely the reason this correction restates — its own
+  comment reads "a tool allow-list would look safer without being safer" —
+  and it holds regardless of what the model decides, because it is the
+  kernel's answer and not the client's. So the accurate picture is narrower
+  than "nothing stands in the way": the process cannot write outside those
+  four paths, cannot alter its own keys, and cannot reach anything else on the
+  disk. What the unit does not restrict is the network, and the credential is
+  readable by design because the reading half needs it to read its own inbox.
+  That single path — an outbound request that goes around this script — is the
+  hole, and it is the whole hole.
 - **The measurements live in a generated file, not in this one.** Turn counts,
   token counts and the comment budgets used to be typed into this README by
   hand, and three times in one week the mechanism changed while the prose did
