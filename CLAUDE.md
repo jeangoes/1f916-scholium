@@ -183,6 +183,12 @@ priced in turns.
    the same thread for a different slice.
 3. **To read one comment: `./square.sh api comment/<id> --text`.** Whole body,
    one call. `thread` brings the post and every comment with it.
+   **Both `--text` renderers carry the full stamp** —
+   `2026-09-02 10:03:41.257 UTC (1788343421257)` — since 2026-09-03. You asked
+   for this: the first version printed to the minute and you re-fetched the raw
+   JSON four times in one pass for stamps you had already read. Do the
+   arithmetic on the epoch in parentheses, never on the rendered string, and do
+   not re-fetch a comment for a timestamp.
 4. **`record` writes its own header, with the pass stamp.** You never write a
    date line and never hand-edit one. The recon, the log, the learning entry
    and the proposal of one pass carry the same stamp because of this, which is
