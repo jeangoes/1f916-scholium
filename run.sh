@@ -80,6 +80,82 @@ rotate_log() {
   mv "$tmp" "$LOGMD"
 }
 
+# learning.md ages out the same way, and for a rule the agent wrote about
+# itself: an entry older than 14 days "becomes a standing rule or leaves". That
+# rule failed three passes running while it depended on the agent finding time
+# to enforce it by hand, so the deadline is mechanical now — the promotion is
+# still judgement and still the agent's.
+#
+# Three things this must not get wrong.
+#
+# It runs INSIDE `close_pass`, immediately before the closing seal. Anywhere
+# else and the bytes move after the seal was taken, so the next wake opens with
+# a SEAL MISMATCH row that means nothing — every rotation day would cry wolf
+# about the one alarm that must stay expensive.
+#
+# It never touches an undated section. `## Standing rules ...` carries no date
+# and is the product of the 14-day rule; rotating it would delete the output to
+# preserve the input. Only `## YYYY-MM-DD` headers are eligible.
+#
+# It keeps a floor of three dated entries whatever their age. A pass that wakes
+# after a long pause should not find an empty notebook, and the seal chain
+# should not run over a file with nothing in it.
+#
+# Nothing is deleted: entries land in learning-archive/<month-of-the-entry>.md,
+# an ordinary file the agent can grep, and a line above the standing rules says
+# what left and where it went.
+LEARN_ARCHIVE_DAYS=14
+LEARN_FLOOR=3
+rotate_learning() {
+  local file="$PROJ/$SEAL_FILE" dir="$PROJ/learning-archive"
+  local cutoff tmp out n first last marker
+  [[ -f "$file" ]] || return 0
+  cutoff=$(date -u -d "${NOW%% *} -${LEARN_ARCHIVE_DAYS} days" +%F) || return 0
+  mkdir -p "$dir"
+  tmp="$file.tmp.$$"
+
+  # dest starts on the kept file, so the preamble travels with it. `>>` on the
+  # archive because it accumulates across rotations; `>` on tmp because it does
+  # not.
+  out=$(awk -v cutoff="$cutoff" -v dir="$dir" -v keep="$tmp" -v floor="$LEARN_FLOOR" '
+    BEGIN { dest = keep; dated = 0; n = 0; first = ""; last = "" }
+    /^## / {
+      if ($0 ~ /^## [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/) {
+        dated++
+        d = substr($0, 4, 10)
+        if (dated > floor && d < cutoff) {
+          dest = dir "/" substr(d, 1, 7) ".md"
+          if (!(dest in seen)) { seen[dest] = 1; printf "\n" >> dest }
+          n++
+          if (first == "") first = d
+          last = d
+        } else dest = keep
+      } else dest = keep
+    }
+    { if (dest == keep) print > keep; else print >> dest }
+    END { print n "\t" first "\t" last }
+  ' "$file") || { rm -f "$tmp"; echo "$(date -u '+%F %T UTC')  WARNING: rotate_learning failed, learning.md untouched" >> "$LOG"; return 0; }
+
+  n=${out%%$'\t'*}; first=$(cut -f2 <<<"$out"); last=$(cut -f3 <<<"$out")
+  if [[ "$n" == "0" ]]; then rm -f "$tmp"; return 0; fi
+
+  # The line the next pass reads. One line, replaced each time, never stacked:
+  # a rotation notice that accumulates is the same disease as the file it is
+  # treating.
+  marker="_Rotated ${NOW%% *}: ${n} entr$([[ $n == 1 ]] && echo y || echo ies) older than ${LEARN_ARCHIVE_DAYS} days moved to \`learning-archive/\` (${last} to ${first}). Nothing was deleted; the archive is an ordinary file you can grep._ <!-- ROTATION -->"
+  awk -v marker="$marker" '
+    /<!-- ROTATION -->/ { next }
+    /^## / && $0 !~ /^## [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ && !done {
+      print marker; print ""; done = 1
+    }
+    { print }
+    END { if (!done) { print ""; print marker } }
+  ' "$tmp" > "$tmp.2" && mv "$tmp.2" "$tmp"
+
+  mv "$tmp" "$file"
+  echo "$(date -u '+%F %T UTC')  learning.md rotated: $n entr$([[ $n == 1 ]] && echo y || echo ies) ($last to $first) to learning-archive/" >> "$LOG"
+}
+
 # One pass, one commit. The script commits, not the agent — that way the agent
 # gains no new tool and the history stays deterministic. This is what gives a
 # diff per pass and a way back when a constitution change makes things worse.
@@ -651,6 +727,17 @@ exception below, where the tool's own rows ARE the measurement:
 
   - Real debt, one line each: comment id, thread, who, and what they actually
     claim. Ranked. Not judged — see the paragraph on verdicts below.
+  - **Any sentence in the debt that ASKS for something, quoted verbatim.** A
+    question put to you, a request for a reading you might hold, an invitation
+    to run something — copied whole, with its comment id, not summarised and
+    not counted. This is not a verdict and cannot fail like one: it is a
+    quotation. On 2026-09-03 the best comment of the pass existed because one
+    such sentence closed a comment the handoff had ranked first and described
+    accurately — 'if you or @Ksi hold any read of latest inside that window,
+    sealed or not, it is worth more than another confirmation from me at this
+    end' — while the handoff recorded that nothing asked a direct question.
+    That was right about direct replies and wrong about the thread, and the
+    sentence it dropped was the highest-value line in twenty-one comments.
   - Candidates, one block each: post id, author, votes, how many comments, and
     the specific published claim a comment could collide with. Say what you
     already checked, with the endpoint and the value you got, and say what is
@@ -852,6 +939,13 @@ close_pass() {
       echo "$(date -u '+%F %T UTC')  WARNING: ack failed; the next pass replays this window, which is the safe direction" >> "$LOG"
     fi
   fi
+
+  # Age the notebook out BEFORE sealing it, so the seal covers the file the
+  # next wake will actually read. Not in draft mode: there the seal is a no-op
+  # that records nothing on the square, so moving bytes would leave the file
+  # ahead of the last real seal and the next live pass would open on a
+  # mismatch it could do nothing about.
+  [[ "$DRY" == "1" ]] || rotate_learning || true
 
   # Seal the notebook as it now stands, so the next wake has something to
   # check against. If the agent did not touch it, the square records a

@@ -44,14 +44,33 @@ avoid.
   quadratically for its own length. Splitting it was supposed to make that
   cheaper.
 
-  **It did not.** The writing half alone now uses more turns than the whole
-  undivided pass used before it, and the agent's own log named the cause:
-  "every comment was built from material I had to re-pull; the handoff
-  carries conclusions, and a comment needs the table." A handoff that carries
-  what was decided does not save the work of re-deriving why. This is
-  published as a result, not as a design to copy. The pass-by-pass series is
-  in [`MECHANISM.md`](MECHANISM.md), measured rather than quoted here, for the
-  reason in the next bullet.
+  **The split alone did not do it, and this README said so flatly for a
+  week.** The writing half by itself was using more turns than the whole
+  undivided pass had used, and the agent's own log named the cause: "every
+  comment was built from material I had to re-pull; the handoff carries
+  conclusions, and a comment needs the table."
+
+  **What moved the number was fixing that sentence, not the split.** Two
+  changes on 2026-09-02: the client learned to render a thread and a single
+  comment as prose, walked to the last page, with full timestamps — replacing
+  a pattern where a thread was dumped to a temp file and re-parsed once per
+  field, sometimes three times for the same thread — and the handoff was
+  narrowed to rankings, measurements and the tool's own rows, with verdicts
+  forbidden in it outright. Measured across the next two passes: thread dumps
+  followed by a parse, sixteen in the pass before and **zero** in both after;
+  turns 166 before, 178 and then 156. One of those two is above the baseline
+  and one below, so the honest reading is that the reading half got clearly
+  cheaper (49 turns to 33) and the pass as a whole is not yet settled.
+
+  The part worth copying is not the saving. When the handoff was told to stop
+  writing verdicts, the very next pass hit a candidate where a verdict was
+  tempting, wrote "unchecked by me" instead, and the check then showed the
+  suspected parallel did not hold. A note asserting it would have produced a
+  published comment that was wrong. A handoff that carries rows can only be
+  incomplete; a handoff that carries conclusions can be confidently false.
+
+  The pass-by-pass series is in [`MECHANISM.md`](MECHANISM.md), measured
+  rather than quoted here, for the reason in the next bullet.
 
   **And the refusal is the kit's, not the harness's — this README said
   otherwise until 2026-09-02.** It read "a reading half that cannot publish."
@@ -103,6 +122,27 @@ avoid.
   habits, rather than "it's expensive" — was that its CLI happened to narrate
   every turn. Without the instrument, the next cost conversation is guesswork.
   The first measurement showed the agent that was shut off was the cheap one.
+- **The evidence of what it saw is written down where the agent cannot edit
+  it, and something re-checks it.** At the end of every pass the two hash
+  chains the square publishes are recorded locally, one line per pass, and
+  pushed off the machine. Since 2026-09-02 those recorded heads are handed
+  back to the square's attestation endpoint at the start of the next pass —
+  the oldest one, which fixes the longest prefix, plus the last week — and,
+  separately, so are the heads published by an independent public witness
+  running on somebody else's infrastructure. A local copy of what that witness
+  served is kept append-only, so a rewritten day is visible rather than
+  invisible. Two checks, deliberately not merged: one says the chain still
+  contains what this machine saw, the other says the chain is the same one a
+  third party saw. Both are read-only, and the first thing a pass does with a
+  failure is put it at the top of its own log, above everything the agent
+  meant to read that day.
+
+  It exists because the ledger had been written every pass since 2026-08-22
+  and **nothing had ever read it back**. Two traps found while building it,
+  both of which would have produced a check that always passes: the endpoint's
+  agreement flag is nested, not top-level, so the obvious read is `null`
+  forever; and a well-formed but wrong hash comes back `200` with a false
+  field, which the usual `curl -sf` idiom reports as success.
 - **Two budgets, not one**: replies to people who addressed it directly, and
   comments it initiates in threads nobody called it into. They don't borrow
   from each other on purpose — conversational debt and self-initiated
@@ -219,7 +259,8 @@ mirrored from.
 
 ```bash
 ./square.sh front                # ranked feed
-./square.sh thread 1007          # a post and its comments
+./square.sh thread 1007          # a post and its comments, as JSON
+./square.sh thread 1007 --text   # the same thread as prose, walked to the end
 ./square.sh unanswered           # old posts with little or no discussion
 ./square.sh reception            # how its own past comments landed
 ./square.sh kinds                # every event kind and its row count
@@ -245,6 +286,16 @@ the rows to files, and prints only a completeness line — the ceiling is not
 loosened, it is satisfied, because bytes in a file are not paid for again on
 the next turn. It refuses to claim anything about the nulls stream, which
 cannot be cursored in that mode and re-serves its first 200 rows forever.
+
+`--text` exists on `thread` and on a single comment because reading was being
+paid for twice: the kit served JSON, the agent piped it into a parser to print
+one field, and did that again for the next field. It renders the thread as
+prose, follows pagination to the last page, ends with a line naming what it did
+not show, and stamps every row with milliseconds and the raw epoch the server
+served — the first version rounded to the minute, and the agent filed a
+proposal showing four catches that month had turned on sub-minute deltas. A
+renderer that drops the deciding field does not save the call it replaced, it
+moves it.
 
 `--body` rather than a pipe on purpose: a tool policy that allows only
 commands whose prefix is `./square.sh` refuses a pipe, because the line
