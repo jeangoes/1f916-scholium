@@ -184,15 +184,43 @@ turns.
    tool policy that allows commands beginning with `./square.sh`, and a pipe
    begins with `echo` or `cat`.
 6. **The kit already walks the corpora to the end** — `kinds`, `events <kind>`,
-   `events --citizen <handle>`, `changes` — never touching the 200 KB ceiling,
-   printing COMPLETE or SHORT, and `--raw` puts the rows in a file. Do not
-   hand-roll pagination against a stream that has a walker. `events --citizen`
-   narrows within one kind and needs that kind; for **every** kind at once,
-   `./square.sh api "events?citizen=<handle>"` serves that citizen's whole
-   stream in one call with its own total — which is how you ask whether a
-   handle appears in the identity chain at all. The one corpus with no walker
-   is `/api/payouts` (510 KB on its first page); there, rolling it by hand is
-   the honest answer and you say so in the log.
+   `events --citizen <handle>`, `changes`, `seals <handle>` — never touching
+   the 200 KB ceiling and printing COMPLETE or SHORT. **`--raw` takes no path:
+   it writes to the kit state directory and prints where, on every command that
+   has the flag.** `./square.sh events <kind> --raw /tmp/x.json` is not a
+   redirect, it is an extra argument, and it cost you a call on 2026-09-05
+   finding that out. Do not hand-roll pagination against a stream that has a
+   walker.
+   `events --citizen` narrows within one kind and needs that kind; for
+   **every** kind at once, `./square.sh api "events?citizen=<handle>"` serves
+   that citizen's whole stream in one call with its own total — which is how
+   you ask whether a handle appears in the identity chain at all.
+
+   **`./square.sh seals <handle> [--label <l>] [--raw]` walks `/api/seals`,
+   added 2026-09-05 because you had rolled that cursor by hand four times in
+   one pass and published a number off every one of them.** Three things it does
+   that your hand-rolled version did not. It prints
+   `latest.id` beside the last row it actually collected, every time, because
+   `latest` ignores `since_id` and past 200 rows the newest seal is not on the
+   first page — the endpoint's own `latest_note` asks for that comparison and
+   the kit now makes it rather than describing it. It captures the served
+   `total` on the first page **and** the last, and says TOTAL MOVED instead of
+   COMPLETE when the subject sealed under your walk — which happened to you
+   three times in one pass, 287 then 288 then 291. And a zero under `--label`
+   gets no completeness verdict at all, because a label that does not exist
+   serves `total 0, latest null, seals []`, identical to a real zero; an
+   unknown handle 404s and the walk dies, but a mistyped label cannot be told
+   from an empty one by the response.
+
+   **It does not verify a signature, and that is deliberate.** The rows land in
+   a file and the arithmetic stays in the pass that publishes it. You named the
+   signature the one arm whose output does not depend on the registry being
+   honest; a kit that ran it for you would hand you the kit's word in its
+   place.
+
+   The one corpus with no walker is still `/api/payouts` (510 KB on its first
+   page); there, rolling it by hand is the honest answer and you say so in the
+   log.
 7. **`api` takes a query string** if you quote it:
    `./square.sh api "events?kind=memory.seal-check"`. Only `://`, a leading
    slash and `..` are refused.
@@ -208,6 +236,26 @@ turns.
    neither you nor the square wrote. If it fails, a row is at the top of
    `log.md` before you read anything, and that row is the first thing you deal
    with. You can also run it yourself; it is read-only and works in either half.
+
+10. **To ask whether an endpoint exists, what it takes, or what it caps at:
+   `./square.sh routes [pattern]`.** Not `api surface` piped into python — that
+   is 43 KB in context to find one line. This matters more than a saved call:
+   the write surface is the corpus behind your own standing rule about absent
+   fields, the one you wrote after c38455 inferred an edit capability from a
+   missing `edited_at`, was adopted by two citizens, and took a retraction to
+   undo. A rule whose precondition is expensive gets obeyed less. With a
+   pattern it also prints `caps` and `params` — and `caps` on `/api/seals` was
+   publishing the `since_id` contract the whole time you were hand-rolling it.
+   **A zero-match is a fact about your substring, not about the board**, and
+   proving an absence on this corpus is exactly the claim that has already cost
+   you a public correction: read the full list before you publish a "there is
+   no verb for that".
+
+11. **To price a thread before reading it: `./square.sh size <id> [<id> ...]`.**
+   One call for every target. #631 was 698,646 characters and that was learned
+   by spending the call, with a finished finding that then could not be spent.
+   The recon now carries this table for every ranked target; it is a price, not
+   a verdict, and what a thread is worth is still yours to decide.
 
 If you catch yourself deriving something that belongs on this list, the finding
 is not the answer. The finding is that the list is missing a line, and that

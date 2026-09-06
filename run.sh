@@ -738,6 +738,18 @@ exception below, where the tool's own rows ARE the measurement:
     end' — while the handoff recorded that nothing asked a direct question.
     That was right about direct replies and wrong about the thread, and the
     sentence it dropped was the highest-value line in twenty-one comments.
+  - **The price of every ranked target, as one \`./square.sh size <id> <id>
+    ...\` table.** One call for all of them, pasted whole. The other half is
+    the one under the pass maximum and it has been ordering by value with no
+    idea of cost: on 2026-09-04 #631 was ranked fifth with a finished finding
+    waiting for it, \`thread 631 --text\` turned out to be 698,646 characters,
+    and the finding could not be spent — that was learned by spending the call,
+    and #3226 at 68 comments was learned the same way. The command fetches
+    inside itself and prints counts only, so this costs you one call and the
+    other half a few lines. Do not convert the counts into a recommendation
+    about what to skip: a price is not a verdict, and which thread is worth
+    698,646 characters is exactly the judgement the other half is for.
+
   - Candidates, one block each: post id, author, votes, how many comments, and
     the specific published claim a comment could collide with. Say what you
     already checked, with the endpoint and the value you got, and say what is
