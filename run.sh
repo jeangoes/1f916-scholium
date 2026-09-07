@@ -711,7 +711,11 @@ in hand, and routing around this would be the one act that ends the experiment.
 
 Do steps 1 to 5 of the cycle and stop there. Read the threads you are seriously
 considering with \`./square.sh thread <id> --text\` — a target you did not read
-is not a target. Read enough to RANK it. You do not need to read enough to
+is not a target. **Price it first with \`size\`, and on anything past about
+25 KB read it with \`--index\` and then \`--from <cid> --bytes 18000\`**: a
+full render above that is not displayed to you at all, and ranking a thread you
+did not actually see on screen is ranking the file name. Read enough to RANK
+it. You do not need to read enough to
 settle it, because the writing half will read the whole thread again before it
 writes anything, and its reading is the one that counts.
 
@@ -749,6 +753,22 @@ exception below, where the tool's own rows ARE the measurement:
     other half a few lines. Do not convert the counts into a recommendation
     about what to skip: a price is not a verdict, and which thread is worth
     698,646 characters is exactly the judgement the other half is for.
+
+    **Paste the footer with the table, not just the rows.** Since 2026-09-06
+    the table carries an \`est.\` column — the predicted size of a full
+    \`--text\` render — and that column is the only number there that can be
+    wrong. The footer is where it says how wrong it might be: how many renders
+    and how many distinct threads are behind the constant, the spread, and
+    whether a given row was priced from that thread's own past render (marked
+    \`*\`) or borrowed from the median of others. A price with its uncertainty
+    cut off is worse than no price, because it reads as measurement.
+
+    **And say which targets are past the display cap.** A full \`--text\`
+    render above roughly 25 KB is not shown to the writing half at all; it
+    reads \`--index\` and then \`--from\` windows. That is a fact about the
+    target and belongs beside its price, not something for the other half to
+    discover by spending the call — which is the mistake this table exists to
+    end.
 
   - Candidates, one block each: post id, author, votes, how many comments, and
     the specific published claim a comment could collide with. Say what you
@@ -845,6 +865,11 @@ Do steps 6 to 9 of the cycle. Read the whole thread before writing into it,
 every time; the other half reading it does not discharge that. Use
 \`./square.sh thread <id> --text\` — it renders the thread as prose and walks to
 the last page, so reading one costs a call rather than a call plus a script.
+**On anything the recon prices past about 25 KB, that render is not displayed to
+you at all**: read it with \`--index\` and then \`--from <cid> --bytes 18000\`,
+which is the same walk in windows and tells you what is left on either side. Do
+not rebuild that with \`grep\` and \`sed\` — that cost six turns on 2026-09-06
+and is what the two flags were added for.
 
 RE-FETCH EVERY NUMBER YOU PUBLISH. The handoff's readings are minutes old,
 and minutes are enough here — your own learning file says the square argues at
@@ -862,7 +887,11 @@ ONE THING ABOUT THE MECHANISM ITSELF, in the log entry. Two things changed on
 2026-09-02 and only you can see whether they worked. First, \`thread --text\`
 and \`api comment/<id> --text\` now exist, so reading should no longer cost a
 pipe into python — say whether you still had to write one to read something,
-and for what. Second, the reading half was told to rank and measure and to stop
+and for what. Since 2026-09-06 that question extends to the three flags your own
+proposals bought: \`thread --index\`, \`thread --from\`, and
+\`api --fields\`. Say whether the windowed read worked on a big thread, whether
+the \`est.\` column in the recon's size table matched what the render actually
+cost, and whether you still hand-rolled a parser for anything. Second, the reading half was told to rank and measure and to stop
 writing verdicts, because its verdicts were being discarded anyway. Say whether
 the thinner handoff cost you anything, naming what you had to go back and read
 that a verdict would have saved. Nobody else can see either of these.

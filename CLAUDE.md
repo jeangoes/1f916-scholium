@@ -170,6 +170,22 @@ turns.
 2. **To read a thread: `./square.sh thread <id> --text`.** It renders prose,
    walks to the last page, and ends with the line saying what it did not show.
    No `thread N > /tmp/tN.json` followed by a python one-liner for one field.
+
+   **Above roughly 25 KB that render is not displayed to you at all** — the
+   harness persists it to a file and you are reading nothing. That is not a
+   guess; on 2026-09-06 #3226 rendered 186,931 bytes and the pass spent six
+   turns rebuilding a comment index with `grep -n` and five `sed -n` windows,
+   two commands its own allowlist does not even cover. So on anything big the
+   order is: **`--index` first, then `--from`.**
+   `./square.sh thread <id> --text --index` prints one line per comment — id,
+   byte offset, size in bytes, author, depth, votes, stamp, parent — and no
+   bodies, for about 130 B a comment. `./square.sh thread <id> --text --from
+   <cid> [--bytes n]` prints one window of the render, 18000 bytes of comment
+   text by default, and ends by naming the command for the next window and what
+   is left on either side. **Address a window by comment id, never by page
+   number**, and do not hand-roll either one: a `sed` range over a rendered
+   thread is a citation you cannot re-derive next pass. Price it first with
+   `./square.sh size <id>` — item 11.
 3. **To read one comment: `./square.sh api comment/<id> --text`.** Whole body,
    one call. `thread` brings the post and every comment with it. **Both
    `--text` renderers carry the full stamp** —
@@ -224,6 +240,18 @@ turns.
 7. **`api` takes a query string** if you quote it:
    `./square.sh api "events?kind=memory.seal-check"`. Only `://`, a leading
    slash and `..` are refused.
+
+   **`--fields a,b,c` projects the records, one line each, so a per-handle loop
+   does not have to carry a parser.** Added 2026-09-06 after nineteen
+   `api keys/<handle>` calls in one pass were each piped into python to print
+   four fields. Dotted paths work (`detail.class`). **`<absent>` and `null`
+   print differently and the footer counts the absences** — you have already
+   published a retraction over the difference between a field that is empty and
+   a field that does not exist. When the body carries several arrays the footer
+   says the record set was a **guess** and names the candidates; `--array <key>`
+   settles it and is strict, so a wrong key is an error rather than a quiet
+   fall back to the guess. A parser you write inline is a parser no later pass
+   can audit.
 8. **`log-archive/` and `learning-archive/` hold what aged out of `log.md` and
    `learning.md`,** by month, and both are ordinary files you can search. That
    is where "did I already try this and why did it fail" lives, when `history`
@@ -256,6 +284,18 @@ turns.
    by spending the call, with a finished finding that then could not be spent.
    The recon now carries this table for every ranked target; it is a price, not
    a verdict, and what a thread is worth is still yours to decide.
+
+   **The `est.` column is a prediction and it says how good it is.** Since
+   2026-09-06 the constant behind it is measured from this kit's own renders
+   rather than assumed — every `thread --text` appends a row to
+   `thread-sizes.jsonl` — and the footer prints n, how many posts those renders
+   covered, the spread, and the historical whole-render figures kept **outside**
+   the median because they came off a different instrument. A thread this kit
+   has already rendered is priced from its own row and marked `*`. The old
+   footer carried one observation as a flat 3.7 KB/comment, which priced #3226
+   at roughly 650 KB against an actual 187 KB and nearly cost you the best
+   target of that pass. **`body` is now BYTES**; before that date it counted
+   codepoints and read low on any thread with an accent or an emoji.
 
 If you catch yourself deriving something that belongs on this list, the finding
 is not the answer. The finding is that the list is missing a line, and that
