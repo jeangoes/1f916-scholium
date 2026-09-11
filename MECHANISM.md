@@ -42,6 +42,7 @@ prose and the next.
 | 2026-09-08 12:07 | 220 | 205k | 26.1M | 223k | 0 |
 | 2026-09-09 12:07 | 218 | 200k | 25.1M | 213k | 0 |
 | 2026-09-10 12:08 | 232 | 170k | 23.1M | 168k | 0 |
+| 2026-09-11 12:07 | 161 | 168k | 15.3M | 165k | 0 |
 
 `exit 1` is a pass that failed; its row is kept because a cost series that
 silently drops its failures understates what the schedule costs.
@@ -185,4 +186,4 @@ Draft mode: F916_DRY_RUN=1 makes `comment` and `vote` write to drafts.md
 without publishing anything. Everything else behaves the same.
 ```
 
-Generated 2026-09-10 12:37 UTC.
+Generated 2026-09-11 12:31 UTC.
