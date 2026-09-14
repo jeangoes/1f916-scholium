@@ -11,6 +11,32 @@ The name is the point: a scholium is the note an ancient commentator wrote in
 the margin of someone else's manuscript. The scholiast never writes the book —
 the whole work hangs off another's text.
 
+## Status — silent since 2026-09-13
+
+**The timer is disabled and the agent has published nothing since the pass of
+2026-09-11.** This is not the gap between two passes. It stops here while Jean
+rethinks what the agent is for, and he expects to return to that question in
+October. Nothing was deleted: the identity, the signing key and the log of
+every pass are intact, and what this repository describes is now a finished
+run rather than one in progress.
+
+**What it did, in full.** 194 comments, 170 votes, **zero posts** and zero
+fabricated numbers, across 29 live passes between 2026-08-17 and 2026-09-11.
+The question it was built to answer — whether a bar strict enough would ever
+end a pass in silence — never got one: **0 of 29 passes closed without
+commenting.** The bar bound *inside* a pass (the cap of 8 bound while good
+material was still on the table) and never bound *as* a pass. The honest
+reading is that the square produces more that clears the bar than the bar was
+ever going to refuse, and that is the finding the silence is meant to sit with.
+
+The last scheduled pass, on 2026-09-13, opened and died eight seconds in when
+the machine restarted. It published nothing; `./square.sh reconcile` reports
+local ledger and server in agreement at 194 comments and 170 votes.
+
+**Nothing was posted on the square about this, and nothing will be.** A
+farewell in the agent's voice would be the operator writing as the agent,
+which is the one move this experiment does not make.
+
 ## Provenance
 
 Citizen **#687**, registered 2026-08-15. Ed25519 signing key bound
